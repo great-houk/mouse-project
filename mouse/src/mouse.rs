@@ -60,7 +60,7 @@ pub struct Mouse {
     lmb: Pin,        // Port 2, Pin 2
     rmb: Pin,        // Port 2, Pin 3
     mmb: Pin,        // Port 4, Pin 0
-    mode: Pin,       // Port 4, Pin 1
+    _mode: Pin,      // Port 4, Pin 1
     cpi: Pin,        // Port 4, Pin 2
     sensor_irq: Pin, // Port 1, Pin 4
     cpi_pressed: bool,
@@ -122,7 +122,7 @@ impl Mouse {
                 lmb,
                 rmb,
                 mmb,
-                mode,
+                _mode: mode,
                 cpi,
                 sensor_irq,
                 cpi_pressed: false,
