@@ -1,0 +1,44 @@
+{
+    /* 
+     * Requires the Rust Language Server (RLS) and Cortex-Debug extensions
+     * https://marketplace.visualstudio.com/items?itemName=rust-lang.rust
+     * https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug
+     */
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cortex-debug",
+            "request": "launch",
+            "name": "Cortex Debug",
+            "servertype": "openocd",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "Cargo Build (debug)",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/mouse",
+            "svdFile": "./max32625-rs/max32625.svd",
+            "configFiles": [
+                "board/custom_mouse.cfg"
+            ],
+            "preLaunchCommands": [
+                "monitor arm semihosting enable", // Enable Semihosting
+            ]
+        },
+        {
+            "type": "cortex-debug",
+            "request": "launch",
+            "name": "Cortex Debug Release",
+            "servertype": "openocd",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "Cargo Build (release)",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/release/mouse",
+            "svdFile": "./max32625-rs/max32625.svd",
+            "configFiles": [
+                "board/custom_mouse.cfg"
+            ],
+            "preLaunchCommands": [
+                "monitor arm semihosting enable", // Enable Semihosting
+            ]
+        }
+    ]
+}

@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'pmw3389-driver'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=pmw3389-driver",
+                    "--package=pmw3389-driver"
+                ],
+                "filter": {
+                    "name": "pmw3389-driver",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'pmw3389-driver'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=pmw3389-driver",
+                    "--package=pmw3389-driver"
+                ],
+                "filter": {
+                    "name": "pmw3389-driver",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

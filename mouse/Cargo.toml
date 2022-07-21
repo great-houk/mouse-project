@@ -1,0 +1,35 @@
+[package]
+authors = ["Tyler Richard <tylergames251@gmail.com>"]
+name = "mouse"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m = { version = "0.7.5", features = ["inline-asm"] }
+cortex-m-rt = { version = "0.7.1", features = ["device"] }
+cortex-m-semihosting = { version = "0.5.0" }
+max32625 = { path = "max32625-rs" }
+max32625-usb = { path = "max32625-usb" }
+max32625-spi = { path = "max32625-spi" }
+max32625-ioman = { path = "max32625-ioman" }
+max32625-gpio = { path = "max32625-gpio" }
+max32625-timer-basic = { path = "max32625-timer-basic" }
+pmw3389-driver = { path = "../pmw3389-driver" }
+mouse-commands = { path = "../mouse-commands" }
+panic-semihosting = { version = "0.6.0" }
+usb-device = "0.2.8"
+usbd-hid = { git = "https://github.com/twitchyliquid64/usbd-hid" }
+usbd-serial = "0.1.1"
+
+[profile.release]
+codegen-units = 1 # better optimizations
+debug = true # symbols are nice and they don't increase the size on Flash
+lto = true # better optimizations
+
+# this lets you use `cargo fix`!
+[[bin]]
+name = "mouse"
+test = false
+bench = false

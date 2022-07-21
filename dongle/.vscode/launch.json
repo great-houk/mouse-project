@@ -1,0 +1,29 @@
+{
+    /* 
+     * Requires the Rust Language Server (RLS) and Cortex-Debug extensions
+     * https://marketplace.visualstudio.com/items?itemName=rust-lang.rust
+     * https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug
+     */
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cortex-debug",
+            "request": "launch",
+            "name": "Cortex Debug",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "Cargo Build (release)",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/release/dongle",
+            "device": "ATSAMD11C14A",
+            "interface": "swd",
+            "serverArgs": [
+                "-gui"
+            ],
+            "preLaunchCommands": [
+                "monitor semihosting enable", // Enable Semihosting
+                "monitor semihosting IOClient 1", // Make the semihosting output to TelNet
+            ]
+        }
+    ]
+}
