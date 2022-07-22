@@ -55,11 +55,10 @@ impl Mouse {
     pub fn save_settings(&self) -> Result<(), ()> {
         // Send request
         self.write(Command::SaveSettings);
-        // Get Response
-        match self.read().unwrap() {
-            Response::Ok => Ok(()),
-            Response::Err(_) => Err(()),
-            _ => unreachable!(),
+        // Get response
+        match self.read() {
+            Ok(Response::Ok) => Ok(()),
+            _ => return Err(()),
         }
     }
 
@@ -97,24 +96,46 @@ impl Mouse {
         }
     }
 
-    pub fn write(&self, command: Command) {
-        // Write data to device
-        let mut buf = [self.report_id; 6];
-        let (command, args) = command.get_command();
-        buf[1] = command;
-        buf[2..].copy_from_slice(&args);
-        self.device.send_feature_report(&buf).unwrap();
+    pub fn set_cpi_keys(&self, mods: u8, keys: [u8; 6]) -> Result<(), ()> {
+        // Send command 1
+        self.write(Command::Cpi1(mods, [keys[0], keys[1]]));
+        // Get response
+        match self.read() {
+            Ok(Response::Ok) => {}
+            _ => return Err(()),
+        }
+        // Send command 2
+        self.write(Command::Cpi2([keys[2], keys[3], keys[4], keys[5]]));
+        // Get response
+        match self.read() {
+            Ok(Response::Ok) => Ok(()),
+            _ => return Err(()),
+        }
     }
+}
 
-    pub fn read(&self) -> Result<Response, CommandError> {
-        let [response, data @ ..] = self.read_raw();
-        Response::match_response(response, data)
-    }
+mod hardware {
+    use super::*;
+    impl Mouse {
+        pub fn write(&self, command: Command) {
+            // Write data to device
+            let mut buf = [self.report_id; 6];
+            let (command, args) = command.get_command();
+            buf[1] = command;
+            buf[2..].copy_from_slice(&args);
+            self.device.send_feature_report(&buf).unwrap();
+        }
 
-    pub fn read_raw(&self) -> [u8; 5] {
-        let mut buf = [0; 6];
-        self.device.read(&mut buf[..]).unwrap();
-        let [_, buf @ ..] = buf;
-        buf
+        pub fn read(&self) -> Result<Response, CommandError> {
+            let [response, data @ ..] = self.read_raw();
+            Response::match_response(response, data)
+        }
+
+        pub fn read_raw(&self) -> [u8; 5] {
+            let mut buf = [0; 6];
+            self.device.read(&mut buf[..]).unwrap();
+            let [_, buf @ ..] = buf;
+            buf
+        }
     }
 }

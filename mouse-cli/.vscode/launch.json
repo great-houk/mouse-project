@@ -12,7 +12,7 @@
                 "args": [
                     "build",
                     "--bin=mouse-cli",
-                    "--package=mouse-cli"
+                    "--package=mouse-cli",
                 ],
                 "filter": {
                     "name": "mouse-cli",

@@ -1,34 +1,31 @@
 use std::collections::HashMap;
 
-enum Type {
-    Modifier,
-    Key,
-}
-
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum ParseError {
     ToManyKeys(usize),
     InvalidToken(String),
 }
 
-fn map_string(input: String) -> Result<(u8, [u8; 6]), ParseError> {
-    let tokens = input.split("+");
+pub fn map_string(input: String) -> Result<(u8, [u8; 6]), ParseError> {
+    let tokens = input.split('+');
     let (mod_map, key_map) = get_hashmaps();
     let mut keys = Vec::with_capacity(6);
     let mut mods = 0;
     // Parse all tokens
     for token in tokens {
+        let token: &str = &token.to_uppercase();
         if let Some(key) = key_map.get(token) {
-            keys.push(key);
+            keys.push(*key);
         } else if let Some(mod_val) = mod_map.get(token) {
             mods |= mod_val;
-        } else if token.as_bytes()  == ['0' as u8, 'x' as u8] {
-            let num = String::from_utf8(&token.as_bytes()[2..4]).unwrap();
-            match u8::from_string_radix(&num, 16) {
+        } else if token.as_bytes().len() == 4 && token.as_bytes()[..2] == ['0' as u8, 'X' as u8] {
+            let num = String::from_utf8(token.as_bytes()[2..4].to_vec()).unwrap();
+            match u8::from_str_radix(&num, 16) {
                 Ok(num) => keys.push(num),
-                Err(_) => return Err(ParseError::InvalidToken(token)),
+                Err(_) => return Err(ParseError::InvalidToken(token.to_string())),
             }
         } else {
-            return Err(ParseError::InvalidToken(token));
+            return Err(ParseError::InvalidToken(token.to_string()));
         }
     }
     // Make sure keys isn't too long
@@ -38,7 +35,7 @@ fn map_string(input: String) -> Result<(u8, [u8; 6]), ParseError> {
     // Return parsed keys
     let mut key_codes = [0; 6];
     key_codes[..keys.len()].copy_from_slice(&keys);
-    Ok(mods, key_codes)
+    Ok((mods, key_codes))
 }
 
 fn get_hashmaps() -> (HashMap<&'static str, u8>, HashMap<&'static str, u8>) {

@@ -109,7 +109,14 @@ pub fn half_ms_loop() -> bool {
 pub fn ten_ms_loop() -> bool {
     // Sanity check USB
     // If there's a nack still pending we should
-    // manually trigger the interrupt
+    // manually trigger the interrupt.
+    // It feels improper to do this instead of
+    // allowing nacks to gen interrupts, but if
+    // you allow it, debug mode generally needs >1ms
+    // for making a packet, and nacks generating interrupts
+    // give it at most an unterrupted 1ms, so it doesn't work.
+    // 10ms is more than enough to form a proper packet and buffer it,
+    // while also being barely noticable to the user.
     if usb::is_naking() {
         max32625::NVIC::pend(Interrupt::USB);
     }

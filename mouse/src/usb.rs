@@ -21,7 +21,7 @@ static USB_BUS: Mutex<RefCell<Option<UsbDevice<UsbBus>>>> = Mutex::new(RefCell::
 static USB_HID: Mutex<RefCell<Option<HIDClass<UsbBus>>>> = Mutex::new(RefCell::new(None));
 static HID_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
 static OUT_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
-static IS_READY: AtomicBool = AtomicBool::new(false);
+static mut IS_READY: bool = false;
 
 pub fn setup_usb(
     usb: USB,
@@ -61,7 +61,7 @@ pub fn setup_usb(
 }
 
 pub fn is_ready() -> bool {
-    IS_READY.load(Ordering::Relaxed)
+    unsafe { IS_READY }
 }
 
 pub fn is_naking() -> bool {
@@ -111,10 +111,7 @@ fn USB() {
             &mut *USB_HID.borrow(cs).borrow_mut(),
         ) {
             // Update setup status
-            IS_READY.store(
-                usb_dev.state() == UsbDeviceState::Configured,
-                Ordering::Relaxed,
-            );
+            unsafe { IS_READY = usb_dev.state() == UsbDeviceState::Configured };
             // Poll device
             usb_dev.poll(&mut [hid]);
             // Push HID report

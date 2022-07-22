@@ -1,4 +1,4 @@
-use crate::commands::Commands;
+use crate::{commands::Commands, keys::map_string};
 use clap::Parser;
 use mouse::Mouse;
 
@@ -38,7 +38,7 @@ fn main() {
                 min,
                 max,
             } => cpi_dpi_increment(increment, min, max),
-            commands::ButtonOptions::KeyPress { keys } => cpi_key(keys),
+            commands::ButtonOptions::KeyPress { keys } => cpi_key(&mouse, keys),
         },
         Commands::LoremIpsum => lorem_ipsum(&mouse),
         Commands::Save => save_settings(&mouse),
@@ -60,8 +60,18 @@ fn save_settings(mouse: &Mouse) {
     }
 }
 
-fn cpi_key(keys: String) {
-    todo!()
+fn cpi_key(mouse: &Mouse, keys: String) {
+    let keys = map_string(keys);
+    match keys {
+        Ok((mods, keys)) => match mouse.set_cpi_keys(mods, keys) {
+            Ok(_) => println!("Keys changed succesfully!"),
+            Err(_) => println!("Failed to change keys..."),
+        }
+        Err(err) => match err {
+            keys::ParseError::ToManyKeys(num) => println!("{num} is too many keys, you can only have 6 keys at once, excluding modifiers. Failed to update"),
+            keys::ParseError::InvalidToken(token) => println!("{token} is an invalid key. Failed to update"),
+        }
+    }
 }
 
 fn cpi_dpi_increment(increment: i32, min: u32, max: u32) {
