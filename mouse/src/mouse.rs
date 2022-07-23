@@ -10,6 +10,8 @@ use max32625_gpio::{GpioError, GpioReg, Pin, PinInMode, PinNum, PinOutMode, Port
 use max32625_timer_basic::{Timer, TimerError};
 use mouse_commands::{Command, CommandError, DataType, Response};
 use pmw3389_driver::{Pmw3389, Pmw3389Error};
+use mouse_error::*;
+use mouse_settings::*;
 
 pub static MOUSE: Mutex<RefCell<Option<Mouse>>> = Mutex::new(RefCell::new(None));
 
@@ -21,38 +23,6 @@ ut aliquip ex ea commodo consequat. Duis aute irure dolor in
 reprehenderit in voluptate velit esse cillum dolore eu fugiat 
 nulla pariatur. Excepteur sint occaecat cupidatat non proident, 
 sunt in culpa qui officia deserunt mollit anim id est laborumaa";
-
-#[derive(Debug, PartialEq, PartialOrd)]
-pub enum MouseError {
-    Gpio(GpioError),
-    Flash(FlashError),
-    Timer(TimerError),
-    Sensor(Pmw3389Error),
-}
-
-impl From<GpioError> for MouseError {
-    fn from(err: GpioError) -> Self {
-        Self::Gpio(err)
-    }
-}
-
-impl From<FlashError> for MouseError {
-    fn from(err: FlashError) -> Self {
-        Self::Flash(err)
-    }
-}
-
-impl From<TimerError> for MouseError {
-    fn from(err: TimerError) -> Self {
-        Self::Timer(err)
-    }
-}
-
-impl From<Pmw3389Error> for MouseError {
-    fn from(err: Pmw3389Error) -> Self {
-        Self::Sensor(err)
-    }
-}
 
 pub struct Mouse {
     forward: Pin,    // Port 2, Pin 0
@@ -354,75 +324,113 @@ impl Mouse {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct MouseSettings {
-    pub dpi: u16,
-    pub cpi_mods: u8,
-    pub lift_mods: u8,
-    pub cpi_keys: [u8; 6],
-    pub lift_keys: [u8; 6],
-}
+mod mouse_error {
+    use super::*;
+    #[derive(Debug, PartialEq, PartialOrd)]
+    pub enum MouseError {
+        Gpio(GpioError),
+        Flash(FlashError),
+        Timer(TimerError),
+        Sensor(Pmw3389Error),
+    }
 
-impl Default for MouseSettings {
-    fn default() -> Self {
-        Self {
-            dpi: 8_000 / 50,
-            cpi_mods: 0,
-            lift_mods: 0b101, /* Left CTRL + Left ALT */
-            cpi_keys: [0x68 /* F13 */, 0, 0, 0, 0, 0],
-            lift_keys: [0x4C /* DEL */, 0, 0, 0, 0, 0],
+    impl From<GpioError> for MouseError {
+        fn from(err: GpioError) -> Self {
+            Self::Gpio(err)
+        }
+    }
+
+    impl From<FlashError> for MouseError {
+        fn from(err: FlashError) -> Self {
+            Self::Flash(err)
+        }
+    }
+
+    impl From<TimerError> for MouseError {
+        fn from(err: TimerError) -> Self {
+            Self::Timer(err)
+        }
+    }
+
+    impl From<Pmw3389Error> for MouseError {
+        fn from(err: Pmw3389Error) -> Self {
+            Self::Sensor(err)
         }
     }
 }
 
-impl FlashData for MouseSettings {
-    fn serialize(&self) -> [u32; 4] {
-        let mut ret = [0; 4];
-        let split_dpi = self.dpi.to_le_bytes();
-        ret[0] = u32::from_le_bytes([split_dpi[0], split_dpi[1], self.cpi_mods, self.lift_mods]);
-        ret[1] = u32::from_le_bytes([
-            self.cpi_keys[0],
-            self.cpi_keys[1],
-            self.cpi_keys[2],
-            self.cpi_keys[3],
-        ]);
-        ret[2] = u32::from_le_bytes([
-            self.cpi_keys[4],
-            self.cpi_keys[5],
-            self.lift_keys[0],
-            self.lift_keys[1],
-        ]);
-        ret[3] = u32::from_le_bytes([
-            self.lift_keys[2],
-            self.lift_keys[3],
-            self.lift_keys[4],
-            self.lift_keys[5],
-        ]);
-        ret
+mod mouse_settings {
+    use super::*;
+    #[derive(Debug, PartialEq, PartialOrd)]
+    pub struct MouseSettings {
+        pub dpi: u16,
+        pub cpi_mods: u8,
+        pub lift_mods: u8,
+        pub cpi_keys: [u8; 6],
+        pub lift_keys: [u8; 6],
     }
 
-    fn from_bytes(bytes: &[u32; 4]) -> Self {
-        // Turn bytes into a u8 array
-        let bytes = {
-            let mut temp = [0; 16];
-            for i in 0..bytes.len() {
-                temp[i * 4..i * 4 + 4].copy_from_slice(&bytes[i].to_le_bytes());
+    impl Default for MouseSettings {
+        fn default() -> Self {
+            Self {
+                dpi: 8_000 / 50,
+                cpi_mods: 0,
+                lift_mods: 0b101, /* Left CTRL + Left ALT */
+                cpi_keys: [0x68 /* F13 */, 0, 0, 0, 0, 0],
+                lift_keys: [0x4C /* DEL */, 0, 0, 0, 0, 0],
             }
-            temp
-        };
-        // Get CPI keys from array
-        let mut cpi = [0; 6];
-        cpi.copy_from_slice(&bytes[4..10]);
-        // Get lift keys from array
-        let mut lift = [0; 6];
-        lift.copy_from_slice(&bytes[10..16]);
-        // Return self
-        Self {
-            dpi: u16::from_le_bytes([bytes[0], bytes[1]]),
-            cpi_mods: bytes[2],
-            lift_mods: bytes[3],
-            cpi_keys: cpi,
-            lift_keys: lift,
+        }
+    }
+
+    impl FlashData for MouseSettings {
+        fn serialize(&self) -> [u32; 4] {
+            let mut ret = [0; 4];
+            let split_dpi = self.dpi.to_le_bytes();
+            ret[0] = u32::from_le_bytes([split_dpi[0], split_dpi[1], self.cpi_mods, self.lift_mods]);
+            ret[1] = u32::from_le_bytes([
+                self.cpi_keys[0],
+                self.cpi_keys[1],
+                self.cpi_keys[2],
+                self.cpi_keys[3],
+            ]);
+            ret[2] = u32::from_le_bytes([
+                self.cpi_keys[4],
+                self.cpi_keys[5],
+                self.lift_keys[0],
+                self.lift_keys[1],
+            ]);
+            ret[3] = u32::from_le_bytes([
+                self.lift_keys[2],
+                self.lift_keys[3],
+                self.lift_keys[4],
+                self.lift_keys[5],
+            ]);
+            ret
+        }
+
+        fn from_bytes(bytes: &[u32; 4]) -> Self {
+            // Turn bytes into a u8 array
+            let bytes = {
+                let mut temp = [0; 16];
+                for i in 0..bytes.len() {
+                    temp[i * 4..i * 4 + 4].copy_from_slice(&bytes[i].to_le_bytes());
+                }
+                temp
+            };
+            // Get CPI keys from array
+            let mut cpi = [0; 6];
+            cpi.copy_from_slice(&bytes[4..10]);
+            // Get lift keys from array
+            let mut lift = [0; 6];
+            lift.copy_from_slice(&bytes[10..16]);
+            // Return self
+            Self {
+                dpi: u16::from_le_bytes([bytes[0], bytes[1]]),
+                cpi_mods: bytes[2],
+                lift_mods: bytes[3],
+                cpi_keys: cpi,
+                lift_keys: lift,
+            }
         }
     }
 }
