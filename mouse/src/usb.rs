@@ -1,8 +1,5 @@
 use crate::{mouse_report::MouseReport, static_borrow::StaticBorrow, PID, VID};
-use core::{
-    cell::RefCell,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use core::cell::RefCell;
 use cortex_m::{
     asm,
     interrupt::{self as interruptm, CriticalSection, Mutex},

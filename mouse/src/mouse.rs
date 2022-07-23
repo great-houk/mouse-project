@@ -64,6 +64,8 @@ pub struct Mouse {
     cpi: Pin,        // Port 4, Pin 2
     sensor_irq: Pin, // Port 1, Pin 4
     cpi_pressed: bool,
+    lifted: bool,
+    lifted_timer: u16,
     sensor: Pmw3389<Pmw3389Driver<TMR1>>,
     response: Option<Response>,
     command: Option<Command>,
@@ -126,6 +128,8 @@ impl Mouse {
                 cpi,
                 sensor_irq,
                 cpi_pressed: false,
+                lifted: false,
+                lifted_timer: 0,
                 sensor,
                 response: None,
                 command: None,
@@ -145,7 +149,7 @@ impl Mouse {
             x: 0,
             y: 0,
             wheel: 0,
-            cpi: [0; 6],
+            keys: [0; 6],
             modifier: 0,
             command: 0,
             args: [0; 4],
@@ -161,11 +165,11 @@ impl Mouse {
             self.cpi_pressed = !self.cpi_pressed;
             // Update struct
             if self.cpi_pressed {
-                report.cpi = self.settings.cpi_keys;
+                report.keys = self.settings.cpi_keys;
                 report.modifier = self.settings.cpi_mods;
             }
             // Use second report ID, so the button gets updated
-            Reports::KeyboardReport
+            Reports::CpiReport
         } else {
             // Get Buttons
             let mouse_buttons = [
@@ -222,6 +226,23 @@ impl Mouse {
         };
         // Return response
         self.response = Some(response);
+    }
+
+    fn which_report_type(&self) -> Reports {
+        // Priorities:
+        // 1. Response to any commands with self.response
+        // 2. Send keyboard reports, lets say CPI first
+        // 3. Send other keyboard report, lift
+        // 4. Send normal mouse reports
+        if let Some(_) = self.response {
+            Reports::CommandResponse
+        } else if self.cpi.read() != self.cpi_pressed {
+            Reports::CpiReport
+        } else if self.lifted {
+            Reports::LiftReport
+        } else {
+            Reports::MouseReport
+        }
     }
 
     fn process_command(&mut self) {

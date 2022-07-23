@@ -86,9 +86,9 @@ pub fn half_ms_loop() -> bool {
         usb::push_hid(report).unwrap();
     }
     if can_pull_hid() {
-        // We can unwrap the error, since we know we can pull
         interruptm::free(|cs| {
             let mut buf = [0; 5];
+            // We can unwrap the error, since we know we can pull
             let report = usb::pull_hid(cs).unwrap();
             // Index 0 has 0x03, the report ID,
             // which we don't care about

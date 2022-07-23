@@ -3,8 +3,9 @@ use usbd_hid::descriptor::generator_prelude::*;
 #[derive(Copy, Clone)]
 pub enum Reports {
     MouseReport = 0x01,
-    KeyboardReport = 0x02,
-    CommandResponse = 0x03,
+    CpiReport = 0x02,
+    LiftReport = 0x03,
+    CommandResponse = 0x04,
 }
 
 #[gen_hid_descriptor(
@@ -34,12 +35,22 @@ pub enum Reports {
                 #[packed_bits 8] #[item_settings data,variable,absolute] modifier=input;
             };
             (usage_page = KEYBOARD, usage_min = 0x00, usage_max = 0xDD) = {
-                #[item_settings data,array,absolute] cpi=input;
+                #[item_settings data,array,absolute] keys=input;
+            };
+        };
+    },
+    (collection = APPLICATION, usage_page = GENERIC_DESKTOP, usage = KEYBOARD) = {
+        (report_id = 0x03,) = {
+            (usage_page = KEYBOARD, usage_min = 0xE0, usage_max = 0xE7) = {
+                #[packed_bits 8] #[item_settings data,variable,absolute] modifier=input;
+            };
+            (usage_page = KEYBOARD, usage_min = 0x00, usage_max = 0xDD) = {
+                #[item_settings data,array,absolute] keys=input;
             };
         };
     },
     (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x01) = {
-        (report_id = 0x03,) = {
+        (report_id = 0x04,) = {
             (usage = 0x1, usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,variable] command=feature;
             };
@@ -63,7 +74,7 @@ pub struct MouseReport {
     pub wheel: i8,
     //
     pub modifier: u8,
-    pub cpi: [u8; 6],
+    pub keys: [u8; 6],
     //
     pub command: u8,
     pub args: [u8; 4],
@@ -83,9 +94,9 @@ impl MouseReport {
                 // Length plus report ID byte
                 6 + 1
             }
-            Reports::KeyboardReport => {
+            Reports::CpiReport | Reports::LiftReport => {
                 buf[1] = self.modifier;
-                buf[2..8].copy_from_slice(&self.cpi);
+                buf[2..8].copy_from_slice(&self.keys);
                 // Length plus report ID byte
                 7 + 1
             }
