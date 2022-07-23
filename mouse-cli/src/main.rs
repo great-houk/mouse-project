@@ -15,7 +15,7 @@ struct Cli {
     pid: u16,
     #[clap(long, short, default_value_t = 0xFF00, value_parser)]
     usage_page: u16,
-    #[clap(long, short, default_value_t = 0x03, value_parser)]
+    #[clap(long, short, default_value_t = 0x04, value_parser)]
     report_id: u8,
     #[clap(subcommand)]
     command: Commands,
@@ -39,6 +39,14 @@ fn main() {
                 max,
             } => cpi_dpi_increment(increment, min, max),
             commands::ButtonOptions::KeyPress { keys } => cpi_key(&mouse, keys),
+        },
+        Commands::LiftButtonFunc { command } => match command {
+            commands::ButtonOptions::DpiIncrement {
+                increment,
+                min,
+                max,
+            } => lift_dpi_increment(increment, min, max),
+            commands::ButtonOptions::KeyPress { keys } => lift_key(&mouse, keys),
         },
         Commands::LoremIpsum => lorem_ipsum(&mouse),
         Commands::Save => save_settings(&mouse),
@@ -74,7 +82,25 @@ fn cpi_key(mouse: &Mouse, keys: String) {
     }
 }
 
+fn lift_key(mouse: &Mouse, keys: String) {
+    let keys = map_string(keys);
+    match keys {
+        Ok((mods, keys)) => match mouse.set_lift_keys(mods, keys) {
+            Ok(_) => println!("Keys changed succesfully!"),
+            Err(_) => println!("Failed to change keys..."),
+        }
+        Err(err) => match err {
+            keys::ParseError::ToManyKeys(num) => println!("{num} is too many keys, you can only have 6 keys at once, excluding modifiers. Failed to update"),
+            keys::ParseError::InvalidToken(token) => println!("{token} is an invalid key. Failed to update"),
+        }
+    }
+}
+
 fn cpi_dpi_increment(increment: i32, min: u32, max: u32) {
+    todo!()
+}
+
+fn lift_dpi_increment(increment: i32, min: u32, max: u32) {
     todo!()
 }
 

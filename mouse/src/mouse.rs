@@ -1,17 +1,19 @@
 use crate::{
     flash::{Flash, FlashData, FlashError},
     mouse_report::{MouseReport, Reports},
-    sensor_driver::{get_x_y, Pmw3389Driver},
+    sensor_driver::Pmw3389Driver,
 };
 use core::cell::RefCell;
 use cortex_m::interrupt::{self as interruptm, Mutex};
-use max32625::{FLC, NVIC, TMR1};
-use max32625_gpio::{GpioError, GpioReg, Pin, PinInMode, PinNum, PinOutMode, Port, GPIO};
+use max32625::{interrupt, Interrupt, FLC, NVIC, TMR1};
+use max32625_gpio::{
+    GpioError, GpioReg, Pin, PinInMode, PinInterruptMode, PinNum, PinOutMode, Port, GPIO,
+};
 use max32625_timer_basic::{Timer, TimerError};
 use mouse_commands::{Command, CommandError, DataType, Response};
-use pmw3389_driver::{Pmw3389, Pmw3389Error};
 use mouse_error::*;
 use mouse_settings::*;
+use pmw3389_driver::{MotionReport, Pmw3389, Pmw3389Error};
 
 pub static MOUSE: Mutex<RefCell<Option<Mouse>>> = Mutex::new(RefCell::new(None));
 
@@ -24,6 +26,16 @@ reprehenderit in voluptate velit esse cillum dolore eu fugiat
 nulla pariatur. Excepteur sint occaecat cupidatat non proident, 
 sunt in culpa qui officia deserunt mollit anim id est laborumaa";
 
+const LIFTED_TIMER_MAX: u16 = 100 * 4; // 100ms
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+enum LiftedStatus {
+    Down,
+    Lifted,
+    SendKeys,
+    KeysSent,
+}
+
 pub struct Mouse {
     forward: Pin,    // Port 2, Pin 0
     back: Pin,       // Port 2, Pin 1
@@ -34,7 +46,7 @@ pub struct Mouse {
     cpi: Pin,        // Port 4, Pin 2
     sensor_irq: Pin, // Port 1, Pin 4
     cpi_pressed: bool,
-    lifted: bool,
+    lifted_status: LiftedStatus,
     lifted_timer: u16,
     sensor: Pmw3389<Pmw3389Driver<TMR1>>,
     response: Option<Response>,
@@ -76,6 +88,7 @@ impl Mouse {
         }
 
         let [forward, back, lmb, rmb, mmb, mode, cpi, sensor_irq, _scroll_a, _scroll_b] = pins;
+
         // Setup wheel loop
         timer.setup_loop_us(250, quater_ms_loop, nvic)?;
 
@@ -87,6 +100,7 @@ impl Mouse {
         // Update mouse sensor
         sensor.set_dpi(settings.dpi as u32 * 50)?;
 
+        // Set static mouse var
         interruptm::free(|cs| {
             *MOUSE.borrow(cs).borrow_mut() = Some(Self {
                 forward,
@@ -98,7 +112,7 @@ impl Mouse {
                 cpi,
                 sensor_irq,
                 cpi_pressed: false,
-                lifted: false,
+                lifted_status: LiftedStatus::Down,
                 lifted_timer: 0,
                 sensor,
                 response: None,
@@ -126,53 +140,69 @@ impl Mouse {
             response: 0,
             data: [0; 4],
         };
-        // Get which report to send
-        let report_type = if let Some(response) = self.response.take() {
-            // Send response
-            (report.response, report.data) = response.get_response();
-            Reports::CommandResponse
-        } else if self.cpi.read() != self.cpi_pressed {
-            self.cpi_pressed = !self.cpi_pressed;
-            // Update struct
-            if self.cpi_pressed {
-                report.keys = self.settings.cpi_keys;
-                report.modifier = self.settings.cpi_mods;
-            }
-            // Use second report ID, so the button gets updated
-            Reports::CpiReport
-        } else {
-            // Get Buttons
-            let mouse_buttons = [
-                self.lmb.read(),
-                self.rmb.read(),
-                self.mmb.read(),
-                self.forward.read(),
-                self.back.read(),
-            ];
-            let mut buttons = 0;
-            for (i, &button) in mouse_buttons.iter().enumerate() {
-                buttons |= (button as u8) << i;
-            }
-            // Get Mouse Movement
-            let (x, y);
-            if self.sensor_irq.read() {
-                (x, y) = get_x_y(&self.sensor);
-            } else {
-                (x, y) = (0, 0);
-            }
-            // Get wheel movement
-            let scroll = self.scroll;
-            self.scroll = 0;
-            // Update struct
-            report.buttons = buttons;
-            report.x = x;
-            report.y = y;
-            report.wheel = scroll;
-            // Use first report ID, so the mouse gets updated
-            Reports::MouseReport
-        };
         // Check if there is some command we still need to process
-        self.process_command();
+        self.process_pending_commands();
+        // Get which report to send
+        let report_type = self.get_report_type();
+        // Set fields in report based on type
+        match report_type {
+            Reports::CommandResponse => {
+                // Send response
+                // Unwrap is ok, since the report type tells us there is a report to send
+                (report.response, report.data) = self.response.take().unwrap().get_response();
+            }
+            Reports::CpiReport => {
+                self.cpi_pressed = !self.cpi_pressed;
+                // Put keys in if CPI is pressed
+                if self.cpi_pressed {
+                    report.keys = self.settings.cpi_keys;
+                    report.modifier = self.settings.cpi_mods;
+                }
+            }
+            Reports::LiftReport => {
+                // Put keys in if this is the first lifted report
+                if self.lifted_status == LiftedStatus::SendKeys {
+                    self.lifted_status = LiftedStatus::KeysSent;
+                    report.keys = self.settings.lift_keys;
+                    report.modifier = self.settings.lift_mods;
+                }
+                // If lifted sent keys last time, all we need to do
+                // is update the status to not send anymore lift packets.
+                else if self.lifted_status == LiftedStatus::KeysSent {
+                    self.lifted_status = LiftedStatus::Down;
+                }
+            }
+            Reports::MouseReport => {
+                // Get Buttons
+                let mouse_buttons = [
+                    self.lmb.read(),
+                    self.rmb.read(),
+                    self.mmb.read(),
+                    self.forward.read(),
+                    self.back.read(),
+                ];
+                let mut buttons = 0;
+                for (i, &button) in mouse_buttons.iter().enumerate() {
+                    buttons |= (button as u8) << i;
+                }
+                report.buttons = buttons;
+                // Get Mouse Movement if IRQ is set
+                if self.sensor_irq.read() {
+                    if let Ok(motion) = self.sensor.read_motion_regs() {
+                        report.x = motion.delta_x();
+                        report.y = motion.delta_y();
+                        if motion.motion().lifted() {
+                            self.lifted_status = LiftedStatus::Lifted;
+                        } else {
+                            self.lifted_status = LiftedStatus::Down;
+                        }
+                    }
+                }
+                // Get wheel movement
+                report.wheel = self.scroll;
+                self.scroll = 0;
+            }
+        };
         // Return data to write
         report.get_report(report_type, buf)
     }
@@ -180,25 +210,32 @@ impl Mouse {
     pub fn interpret_mouse_report(&mut self, [command, args @ ..]: &[u8; 5]) {
         let command = Command::match_command(*command, args);
         // Start or stop command loops for longer than one response commands
-        match command {
-            Ok(ref command) => match command {
+        self.command = Some(match command {
+            Ok(command) => command,
+            Err(err) => Command::Err(err),
+        })
+    }
+
+    fn process_pending_commands(&mut self) {
+        // Get Response
+        if let Some(mut command) = self.command {
+            let response = self.get_response(&mut command);
+            // Update response
+            self.response = Some(response);
+        }
+        // Dispose/Update command
+        if let Some(command) = self.command {
+            match command {
+                Command::Loop(ind, com) => self.command = Some(Command::Loop(ind + 1, com)),
                 Command::LoremIpsum | Command::ReportScrollState(_) => {
                     self.command = Some(Command::Loop(0, command.get_command()))
                 }
-                _ => {}
-            },
-            Err(_) => {}
-        };
-        // Get intial response
-        let response = match command {
-            Ok(mut command) => self.get_response(&mut command),
-            Err(err) => Response::Err(err),
-        };
-        // Return response
-        self.response = Some(response);
+                _ => self.command = None,
+            }
+        }
     }
 
-    fn which_report_type(&self) -> Reports {
+    fn get_report_type(&self) -> Reports {
         // Priorities:
         // 1. Response to any commands with self.response
         // 2. Send keyboard reports, lets say CPI first
@@ -208,25 +245,12 @@ impl Mouse {
             Reports::CommandResponse
         } else if self.cpi.read() != self.cpi_pressed {
             Reports::CpiReport
-        } else if self.lifted {
+        } else if self.lifted_status == LiftedStatus::SendKeys
+            || self.lifted_status == LiftedStatus::KeysSent
+        {
             Reports::LiftReport
         } else {
             Reports::MouseReport
-        }
-    }
-
-    fn process_command(&mut self) {
-        // Get Response
-        if let Some(mut command) = self.command {
-            let response = self.get_response(&mut command);
-            // Update response
-            self.response = Some(response);
-        }
-        // Increment Loops
-        if let Some(Command::Loop(ind, com)) = self.command {
-            self.command = Some(Command::Loop(ind + 1, com))
-        } else {
-            self.command = None;
         }
     }
 
@@ -386,7 +410,8 @@ mod mouse_settings {
         fn serialize(&self) -> [u32; 4] {
             let mut ret = [0; 4];
             let split_dpi = self.dpi.to_le_bytes();
-            ret[0] = u32::from_le_bytes([split_dpi[0], split_dpi[1], self.cpi_mods, self.lift_mods]);
+            ret[0] =
+                u32::from_le_bytes([split_dpi[0], split_dpi[1], self.cpi_mods, self.lift_mods]);
             ret[1] = u32::from_le_bytes([
                 self.cpi_keys[0],
                 self.cpi_keys[1],
@@ -448,26 +473,35 @@ fn quater_ms_loop() -> bool {
     let state = (a as u8) | ((b as u8) << 1);
     let last_state = unsafe { LAST_STATE };
     unsafe { LAST_STATE = state };
-    // Check change
-    if state == last_state {
-        return true;
-    }
-    // Get logic vars
-    let changed = state ^ last_state;
     let mut scroll = 0;
-    // Do logic
-    if a == b {
-        if changed == 0b10 {
-            scroll = 1;
-        } else {
-            scroll = -1;
+    // Make sure there was a scroll
+    if state != last_state {
+        // Check change
+        let changed = state ^ last_state;
+        // Do logic
+        if a == b {
+            if changed == 0b10 {
+                scroll = 1;
+            } else {
+                scroll = -1;
+            }
         }
     }
     // Update Mouse
     interruptm::free(|cs| {
         if let Some(mouse) = &mut *MOUSE.borrow(cs).borrow_mut() {
+            // Update scroll
             mouse.scroll += scroll;
             mouse.scroll_state = state;
+            // Update lifted
+            if mouse.lifted_status == LiftedStatus::Lifted {
+                mouse.lifted_timer += 1;
+            } else if mouse.lifted_timer > 0 && mouse.lifted_timer < LIFTED_TIMER_MAX {
+                mouse.lifted_status = LiftedStatus::SendKeys;
+                mouse.lifted_timer = 0;
+            } else {
+                mouse.lifted_timer = 0;
+            }
         }
     });
     // Continue loop

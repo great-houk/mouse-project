@@ -15,6 +15,13 @@ pub enum Commands {
         #[clap(subcommand)]
         command: ButtonOptions,
     },
+    /// Sets either the keys to press or the DPI to
+    /// change by when the CPI button is pressed.
+    #[clap(name = "lift")]
+    LiftButtonFunc {
+        #[clap(subcommand)]
+        command: ButtonOptions,
+    },
     /// Get's the mouse to say back a part of the famous Lorem Ipsum.
     /// Used to check that every device/library is working as intended.
     #[clap(name = "lorem-ipsum")]

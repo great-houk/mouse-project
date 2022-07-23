@@ -112,6 +112,23 @@ impl Mouse {
             _ => return Err(()),
         }
     }
+
+    pub fn set_lift_keys(&self, mods: u8, keys: [u8; 6]) -> Result<(), ()> {
+        // Send command 1
+        self.write(Command::Lift1(mods, [keys[0], keys[1]]));
+        // Get response
+        match self.read() {
+            Ok(Response::Ok) => {}
+            _ => return Err(()),
+        }
+        // Send command 2
+        self.write(Command::Lift2([keys[2], keys[3], keys[4], keys[5]]));
+        // Get response
+        match self.read() {
+            Ok(Response::Ok) => Ok(()),
+            _ => return Err(()),
+        }
+    }
 }
 
 mod hardware {

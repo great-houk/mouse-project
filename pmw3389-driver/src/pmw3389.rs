@@ -78,6 +78,11 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(buf.into())
     }
 
+    pub fn read_motion(&self) -> Result<Motion, Pmw3389Error> {
+        let val = self.read_reg(Register::Motion, true)?;
+        Ok(Motion { val })
+    }
+
     pub fn read_dpi(&self) -> Result<u32, Pmw3389Error> {
         let value_h = self.read_reg(Register::ResolutionH, false)?;
         let value_l = self.read_reg(Register::ResolutionL, true)?;
@@ -92,7 +97,7 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(())
     }
 
-    fn read_reg(&self, register: impl Into<u8>, end: bool) -> Result<u8, Pmw3389Error> {
+    pub fn read_reg(&self, register: impl Into<u8>, end: bool) -> Result<u8, Pmw3389Error> {
         // Send adress of the register, with MSBit = 0 to indicate it's a read
         self.driver.spi_write(&[register.into() & 0x7f], false)?;
         self.driver.delay_us(160)?; // tSRAD

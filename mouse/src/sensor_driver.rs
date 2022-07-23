@@ -2,7 +2,7 @@ use max32625::{CLKMAN, IOMAN, SPIM1};
 use max32625_gpio::{PinNum, PinOutMode, PinVoltageSupply, Port, GPIO};
 use max32625_spi::{Polarity, SpiClockScale, SpiMode, Spim, SS};
 use max32625_timer_basic::Timer;
-use pmw3389_driver::{Pmw3389, Pmw3389Driver as Driver, Pmw3389Error};
+use pmw3389_driver::{Pmw3389Driver as Driver, Pmw3389Error};
 
 #[derive(Debug)]
 pub struct Pmw3389Driver<TIMER: Timer> {
@@ -88,11 +88,4 @@ impl<TIMER: Timer> Driver for Pmw3389Driver<TIMER> {
             .delay_ms(ms)
             .map_err(|_| Pmw3389Error::TimerError("Invalid Delay"))
     }
-}
-
-pub fn get_x_y(sensor: &Pmw3389<Pmw3389Driver<impl Timer>>) -> (i16, i16) {
-    let motion = sensor.read_motion_regs().unwrap();
-    let x = motion.delta_x();
-    let y = motion.delta_y();
-    (x, y)
 }
