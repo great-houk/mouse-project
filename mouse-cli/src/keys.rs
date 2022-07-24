@@ -6,6 +6,40 @@ pub enum ParseError {
     InvalidToken(String),
 }
 
+pub fn map_keys(mods: u8, keys: [u8; 6]) -> String {
+    let (modmap, mut keymap) = get_hashmaps();
+    keymap.insert("", 0x00);
+    let mut ret_str = "".to_string();
+    // Get mods first
+    for i in 0..8 {
+        if let Some(val) = find_key_for_value(&modmap, mods & (1 << i)) {
+            ret_str = ret_str + val + "+";
+        }
+    }
+    // Get keys
+    for key in keys {
+        if let Some(val) = find_key_for_value(&keymap, key) {
+            if val != "" {
+                ret_str = ret_str + val + "+";
+            }
+        } else {
+            ret_str += &format!("0x{key:02X}+");
+        }
+    }
+    // Remove last +
+    if ret_str.len() > 0 {
+        ret_str.truncate(ret_str.len() - 1);
+    } else {
+        ret_str = "None".to_string();
+    }
+    ret_str
+}
+
+fn find_key_for_value<'a>(map: &'a HashMap<&'static str, u8>, value: u8) -> Option<&'static str> {
+    map.iter()
+        .find_map(|(key, &val)| if val == value { Some(*key) } else { None })
+}
+
 pub fn map_string(input: String) -> Result<(u8, [u8; 6]), ParseError> {
     let tokens = input.split('+');
     let (mod_map, key_map) = get_hashmaps();

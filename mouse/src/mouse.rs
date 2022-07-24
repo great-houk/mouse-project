@@ -5,7 +5,8 @@ use crate::{
 };
 use core::cell::RefCell;
 use cortex_m::interrupt::{self as interruptm, Mutex};
-use max32625::{interrupt, Interrupt, FLC, NVIC, TMR1};
+use max32625::{interrupt, Interrupt, ADC, CLKMAN, FLC, NVIC, TMR1};
+use max32625_adc::{Adc, AdcChannel, AdcSettings};
 use max32625_gpio::{
     GpioError, GpioReg, Pin, PinInMode, PinInterruptMode, PinNum, PinOutMode, Port, GPIO,
 };
@@ -55,14 +56,18 @@ pub struct Mouse {
     scroll: i8,
     settings: MouseSettings,
     flash: Flash<MouseSettings>,
+    adc: Adc,
+    bat_voltage: f32,
 }
 
 impl Mouse {
     pub fn new(
         nvic: &mut NVIC,
         gpio: &mut GPIO,
+        clkman: &CLKMAN,
         sensor: Pmw3389<Pmw3389Driver<TMR1>>,
         timer: impl Timer,
+        adc: ADC,
         flc: FLC,
     ) -> Result<(), MouseError> {
         let pins = [
@@ -100,6 +105,9 @@ impl Mouse {
         // Update mouse sensor
         sensor.set_dpi(settings.dpi as u32 * 50)?;
 
+        // Setup ADC
+        let adc = Adc::init(adc, clkman);
+
         // Set static mouse var
         interruptm::free(|cs| {
             *MOUSE.borrow(cs).borrow_mut() = Some(Self {
@@ -121,6 +129,8 @@ impl Mouse {
                 scroll: 0,
                 settings,
                 flash,
+                adc,
+                bat_voltage: 0.,
             });
         });
 
@@ -216,6 +226,21 @@ impl Mouse {
         })
     }
 
+    pub fn update_battery_level(&mut self) {
+        const BATTERY_SETTINGS: AdcSettings = AdcSettings::new(AdcChannel::AIN0HV);
+        // Get voltage level
+        let voltage = self.adc.get_value(BATTERY_SETTINGS);
+        // Process it
+        /*
+        Channels 4 - 5: (AIN0 / 5), (AIN1 / 5):
+            AdcData[9 : 0] = round { (AIN / (5×VREF)) × MAX }
+            VREF = 1.2
+            MAX = 0x3FF
+        */
+        let voltage = (voltage as f32 / 0x3FF as f32) * 5. * 1.2;
+        self.bat_voltage = voltage;
+    }
+
     fn process_pending_commands(&mut self) {
         // Get Response
         if let Some(mut command) = self.command {
@@ -226,10 +251,10 @@ impl Mouse {
         // Dispose/Update command
         if let Some(command) = self.command {
             match command {
-                Command::Loop(ind, com) => self.command = Some(Command::Loop(ind + 1, com)),
-                Command::LoremIpsum | Command::ReportScrollState(_) => {
+                Command::LoremIpsum | Command::ReportScrollState(_) | Command::GetSettings => {
                     self.command = Some(Command::Loop(0, command.get_command()))
                 }
+                Command::Loop(ind, com) => self.command = Some(Command::Loop(ind + 1, com)),
                 _ => self.command = None,
             }
         }
@@ -261,13 +286,7 @@ impl Mouse {
             Command::Stop => Response::Ok,
             Command::ReportScrollState(_) => Response::ScrollState(self.scroll_state),
             Command::LoremIpsum => Response::DataArray(LOREM_IPSUM.len() as u16, DataType::String),
-            Command::GetDPI => match self.sensor.read_dpi() {
-                Ok(dpi) => {
-                    self.settings.dpi = (dpi / 50) as u16;
-                    Response::Dpi(dpi)
-                }
-                Err(_) => Response::Err(CommandError::SensorErr),
-            },
+            Command::GetSettings => Response::DataArray(4, DataType::Settings),
             Command::SetDPI(dpi) => {
                 if *dpi < 16_000 && *dpi > 0 {
                     self.settings.dpi = (*dpi / 50) as u16;
@@ -330,6 +349,26 @@ impl Mouse {
                         Command::ReportScrollState(iters) => {
                             if ind < iters as usize {
                                 Response::ScrollState(self.scroll_state)
+                            } else {
+                                Response::Ok
+                            }
+                        }
+                        // Settings Getter
+                        Command::GetSettings => {
+                            if ind < 4 {
+                                let dpi = self.settings.dpi.to_le_bytes();
+                                let ckeys = self.settings.cpi_keys;
+                                let cpi_mods = self.settings.cpi_mods;
+                                let lkeys = self.settings.lift_keys;
+                                let lift_mods = self.settings.lift_mods;
+                                let bvolt = self.bat_voltage.to_le_bytes();
+                                Response::RawData(match ind {
+                                    0 => [dpi[0], dpi[1], ckeys[0], ckeys[1], ckeys[2]],
+                                    1 => [ckeys[3], ckeys[4], ckeys[5], cpi_mods, lkeys[0]],
+                                    2 => [lkeys[1], lkeys[2], lkeys[3], lkeys[4], lkeys[5]],
+                                    3 => [lift_mods, bvolt[0], bvolt[1], bvolt[2], bvolt[3]],
+                                    _ => unreachable!(),
+                                })
                             } else {
                                 Response::Ok
                             }

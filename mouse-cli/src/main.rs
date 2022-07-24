@@ -1,5 +1,6 @@
 use crate::{commands::Commands, keys::map_string};
 use clap::Parser;
+use keys::map_keys;
 use mouse::Mouse;
 
 mod commands;
@@ -32,25 +33,49 @@ fn main() {
             Some(dpi) => set_dpi(&mouse, dpi),
             None => read_dpi(&mouse),
         },
-        Commands::CpiButtonFunc { command } => match command {
-            commands::ButtonOptions::DpiIncrement {
-                increment,
-                min,
-                max,
-            } => cpi_dpi_increment(increment, min, max),
-            commands::ButtonOptions::KeyPress { keys } => cpi_key(&mouse, keys),
+        Commands::CpiButtonFunc { keys } => match keys {
+            Some(keys) => set_cpi_keys(&mouse, keys),
+            None => get_cpi_keys(&mouse),
         },
-        Commands::LiftButtonFunc { command } => match command {
-            commands::ButtonOptions::DpiIncrement {
-                increment,
-                min,
-                max,
-            } => lift_dpi_increment(increment, min, max),
-            commands::ButtonOptions::KeyPress { keys } => lift_key(&mouse, keys),
+        Commands::LiftButtonFunc { keys } => match keys {
+            Some(keys) => set_lift_keys(&mouse, keys),
+            None => get_lift_keys(&mouse),
         },
         Commands::LoremIpsum => lorem_ipsum(&mouse),
         Commands::Save => save_settings(&mouse),
+        Commands::Battery => get_battery_voltage(&mouse),
+        Commands::SayHi => say_hi(&mouse),
     };
+}
+
+fn say_hi(mouse: &Mouse) {
+    let hi = mouse.say_hi();
+    match hi {
+        Ok(hi) => println!("Mouse: {hi}"),
+        Err(_) => println!("Failed to get hi :("),
+    }
+}
+
+fn get_battery_voltage(mouse: &Mouse) {
+    // Get voltage
+    let voltage = mouse.get_settings().bat_volt();
+    println!("Battery voltage is at {voltage} volts");
+}
+
+fn get_lift_keys(mouse: &Mouse) {
+    // Get keys
+    let keys = mouse.get_settings().lift_keys();
+    let mods = mouse.get_settings().lift_mods();
+    let string = map_keys(mods, keys);
+    println!("Currently Lift keys are set to: {string}");
+}
+
+fn get_cpi_keys(mouse: &Mouse) {
+    // Get keys
+    let keys = mouse.get_settings().cpi_keys();
+    let mods = mouse.get_settings().cpi_mods();
+    let string = map_keys(mods, keys);
+    println!("Currently Cpi keys are set to: {string}");
 }
 
 fn lorem_ipsum(mouse: &Mouse) {
@@ -68,7 +93,7 @@ fn save_settings(mouse: &Mouse) {
     }
 }
 
-fn cpi_key(mouse: &Mouse, keys: String) {
+fn set_cpi_keys(mouse: &Mouse, keys: String) {
     let keys = map_string(keys);
     match keys {
         Ok((mods, keys)) => match mouse.set_cpi_keys(mods, keys) {
@@ -82,7 +107,7 @@ fn cpi_key(mouse: &Mouse, keys: String) {
     }
 }
 
-fn lift_key(mouse: &Mouse, keys: String) {
+fn set_lift_keys(mouse: &Mouse, keys: String) {
     let keys = map_string(keys);
     match keys {
         Ok((mods, keys)) => match mouse.set_lift_keys(mods, keys) {
@@ -96,16 +121,8 @@ fn lift_key(mouse: &Mouse, keys: String) {
     }
 }
 
-fn cpi_dpi_increment(increment: i32, min: u32, max: u32) {
-    todo!()
-}
-
-fn lift_dpi_increment(increment: i32, min: u32, max: u32) {
-    todo!()
-}
-
 fn read_dpi(mouse: &Mouse) {
-    let dpi = mouse.read_dpi();
+    let dpi = mouse.get_settings().dpi();
     println!("Mouse is set at {dpi} DPI");
 }
 

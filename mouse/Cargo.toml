@@ -14,6 +14,7 @@ max32625 = { path = "max32625-rs" }
 max32625-usb = { path = "max32625-usb" }
 max32625-spi = { path = "max32625-spi" }
 max32625-ioman = { path = "max32625-ioman" }
+max32625-adc = { path = "max32625-adc" }
 max32625-gpio = { path = "max32625-gpio" }
 max32625-timer-basic = { path = "max32625-timer-basic" }
 pmw3389-driver = { path = "../pmw3389-driver" }

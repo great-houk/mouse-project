@@ -40,16 +40,30 @@ impl Mouse {
         }
     }
 
-    pub fn read_dpi(&self) -> u32 {
+    pub fn get_settings(&self) -> MouseSettings {
         // Send request
-        self.write(Command::GetDPI);
+        self.write(Command::GetSettings);
         // Get Response
         let val = self.read();
-        if let Ok(Response::Dpi(dpi)) = val {
-            return dpi;
-        } else {
-            panic!("Failed to read DPI: {val:?}");
+        if val != Ok(Response::DataArray(4, DataType::Settings)) {
+            panic!("Failed to get settings");
         }
+        // Get data
+        let mut data = Vec::with_capacity(20);
+        for _ in 0..4 {
+            let raw = self.read_raw();
+            for byte in raw {
+                data.push(byte);
+            }
+        }
+        // Get OK
+        if self.read() != Ok(Response::Ok) {
+            panic!("Didn't recieve Ok!");
+        }
+        // Get settings
+        let mut buf = [0; 20];
+        buf.copy_from_slice(&data);
+        MouseSettings::from_bytes(&buf)
     }
 
     pub fn save_settings(&self) -> Result<(), ()> {
@@ -129,6 +143,17 @@ impl Mouse {
             _ => return Err(()),
         }
     }
+
+    pub fn say_hi(&self) -> Result<String, ()> {
+        // Send command
+        self.write(Command::SayHi);
+        // Read hi
+        if let Ok(Response::String(hi)) = self.read() {
+            Ok(String::from_utf8(hi.to_vec()).unwrap())
+        } else {
+            Err(())
+        }
+    }
 }
 
 mod hardware {
@@ -154,5 +179,59 @@ mod hardware {
             let [_, buf @ ..] = buf;
             buf
         }
+    }
+}
+
+pub struct MouseSettings {
+    dpi: u16,
+    cpi_keys: [u8; 6],
+    cpi_mods: u8,
+    lift_keys: [u8; 6],
+    lift_mods: u8,
+    bat_volt: f32,
+}
+
+impl MouseSettings {
+    pub fn from_bytes(bytes: &[u8; 20]) -> Self {
+        let dpi = u16::from_le_bytes([bytes[0], bytes[1]]);
+        let mut cpi_keys = [0; 6];
+        cpi_keys.copy_from_slice(&bytes[2..8]);
+        let cpi_mods = bytes[8];
+        let mut lift_keys = [0; 6];
+        lift_keys.copy_from_slice(&bytes[9..15]);
+        let lift_mods = bytes[15];
+        let bat_volt = f32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        Self {
+            dpi,
+            cpi_keys,
+            cpi_mods,
+            lift_keys,
+            lift_mods,
+            bat_volt,
+        }
+    }
+
+    pub fn dpi(&self) -> u16 {
+        self.dpi * 50
+    }
+
+    pub fn cpi_keys(&self) -> [u8; 6] {
+        self.cpi_keys
+    }
+
+    pub fn cpi_mods(&self) -> u8 {
+        self.cpi_mods
+    }
+
+    pub fn lift_keys(&self) -> [u8; 6] {
+        self.lift_keys
+    }
+
+    pub fn lift_mods(&self) -> u8 {
+        self.lift_mods
+    }
+
+    pub fn bat_volt(&self) -> f32 {
+        self.bat_volt
     }
 }

@@ -54,7 +54,16 @@ fn main() -> ! {
     let sensor_driver = Pmw3389Driver::new(sensor_spi, sensor_timer, &mut gpio, &ioman, &clkman);
     let sensor = interruptm::free(|_| Pmw3389::init(sensor_driver).unwrap());
 
-    Mouse::new(&mut nvic, &mut gpio, sensor, scroll_wheel_timer, flc).unwrap();
+    Mouse::new(
+        &mut nvic,
+        &mut gpio,
+        &clkman,
+        sensor,
+        scroll_wheel_timer,
+        adc,
+        flc,
+    )
+    .unwrap();
 
     main_timer
         .setup_loop_us(500, half_ms_loop, &mut nvic)
@@ -120,6 +129,17 @@ pub fn ten_ms_loop() -> bool {
     if usb::is_naking() {
         max32625::NVIC::pend(Interrupt::USB);
     }
+    // Get battery level. This shouldn't change very fast, so leaving it be
+    // for as long as possible works well.
+    interruptm::free(|cs| {
+        MOUSE
+            .borrow(cs)
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .update_battery_level()
+    });
+    // Continue loop
     true
 }
 

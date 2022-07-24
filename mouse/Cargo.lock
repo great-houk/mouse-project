@@ -90,6 +90,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "max32625-adc"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "max32625",
+]
+
+[[package]]
 name = "max32625-gpio"
 version = "0.1.0"
 dependencies = [
@@ -141,6 +149,7 @@ dependencies = [
  "cortex-m-rt",
  "cortex-m-semihosting",
  "max32625",
+ "max32625-adc",
  "max32625-gpio",
  "max32625-ioman",
  "max32625-spi",

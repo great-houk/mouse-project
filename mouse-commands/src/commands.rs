@@ -36,7 +36,7 @@ pub enum Command {
     Stop,
     LoremIpsum,
     Err(CommandError),
-    GetDPI,
+    GetSettings,
     SetDPI(u32 /* DPI */),
     SaveSettings,
     Cpi1(u8 /* Mods */, [u8; 2] /* First 2 of keys array */),
@@ -56,7 +56,7 @@ impl Command {
             Command::Stop => (2, [0; 4]),
             Command::LoremIpsum => (3, [0; 4]),
             Command::Err(err) => (4, err.to_bytes()),
-            Command::GetDPI => (5, [0; 4]),
+            Command::GetSettings => (5, [0; 4]),
             Command::SetDPI(dpi) => (6, dpi.to_le_bytes()),
             Command::SaveSettings => (7, [0; 4]),
             Command::Cpi1(mods, keys) => (8, [*mods, keys[0], keys[1], 0]),
@@ -87,7 +87,7 @@ impl Command {
             // Err
             (4, err) => Ok(Command::Err(CommandError::from_bytes(err)?)),
             // Get DPI
-            (5, _) => Ok(Command::GetDPI),
+            (5, _) => Ok(Command::GetSettings),
             // Set DPI
             (6, dpi) => Ok(Command::SetDPI(u32::from_le_bytes(*dpi))),
             // Save settings
@@ -114,7 +114,6 @@ pub enum Response {
     ScrollState(u8 /* State */),
     DataArray(u16 /* Length */, DataType),
     RawData([u8; 5]),
-    Dpi(u32 /* Dpi Value */),
 }
 
 impl Response {
@@ -129,7 +128,6 @@ impl Response {
                 let [len0, len1] = len.to_le_bytes();
                 (4, [len0, len1, data as u8, 0])
             }
-            Response::Dpi(dpi) => (5, dpi.to_le_bytes()),
         }
     }
 
@@ -151,8 +149,6 @@ impl Response {
                 u16::from_le_bytes([len0, len1]),
                 DataType::from(data)?,
             )),
-            // Dpi Report
-            (5, dpi) => Ok(Response::Dpi(u32::from_le_bytes(dpi))),
             // Nothing/Raw Data
             _ => Err(CommandError::InvalidResponse),
         }
@@ -163,6 +159,7 @@ impl Response {
 pub enum DataType {
     String = 0,
     RGB = 1,
+    Settings = 2,
 }
 
 impl DataType {
@@ -170,6 +167,7 @@ impl DataType {
         match val {
             0 => Ok(Self::String),
             1 => Ok(Self::RGB),
+            2 => Ok(Self::Settings),
             _ => Err(CommandError::InvalidArgs),
         }
     }
