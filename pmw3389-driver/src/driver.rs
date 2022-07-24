@@ -5,6 +5,8 @@ pub enum Pmw3389Error {
     /// String contains the reason
     TimerError(&'static str),
     FailedUpload,
+    CantRead,
+    CantWrite,
 }
 
 pub trait Pmw3389Driver {

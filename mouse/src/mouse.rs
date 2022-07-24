@@ -5,16 +5,14 @@ use crate::{
 };
 use core::cell::RefCell;
 use cortex_m::interrupt::{self as interruptm, Mutex};
-use max32625::{interrupt, Interrupt, ADC, CLKMAN, FLC, NVIC, TMR1};
+use max32625::{ADC, CLKMAN, FLC, NVIC, TMR1};
 use max32625_adc::{Adc, AdcChannel, AdcSettings};
-use max32625_gpio::{
-    GpioError, GpioReg, Pin, PinInMode, PinInterruptMode, PinNum, PinOutMode, Port, GPIO,
-};
+use max32625_gpio::{GpioError, GpioReg, Pin, PinInMode, PinNum, PinOutMode, Port, GPIO};
 use max32625_timer_basic::{Timer, TimerError};
 use mouse_commands::{Command, CommandError, DataType, Response};
 use mouse_error::*;
 use mouse_settings::*;
-use pmw3389_driver::{MotionReport, Pmw3389, Pmw3389Error};
+use pmw3389_driver::{Pmw3389, Pmw3389Error};
 
 pub static MOUSE: Mutex<RefCell<Option<Mouse>>> = Mutex::new(RefCell::new(None));
 

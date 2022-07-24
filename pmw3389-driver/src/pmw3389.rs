@@ -1,4 +1,4 @@
-use crate::{Pmw3389Driver, Pmw3389Error};
+use crate::{regs::RegisterSize, Pmw3389Driver, Pmw3389Error, Pmw3389Register};
 
 pub struct Pmw3389<DRIVER: Pmw3389Driver> {
     driver: DRIVER,
@@ -78,11 +78,6 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(buf.into())
     }
 
-    pub fn read_motion(&self) -> Result<Motion, Pmw3389Error> {
-        let val = self.read_reg(Register::Motion, true)?;
-        Ok(Motion { val })
-    }
-
     pub fn read_dpi(&self) -> Result<u32, Pmw3389Error> {
         let value_h = self.read_reg(Register::ResolutionH, false)?;
         let value_l = self.read_reg(Register::ResolutionL, true)?;
@@ -97,7 +92,64 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(())
     }
 
-    pub fn read_reg(&self, register: impl Into<u8>, end: bool) -> Result<u8, Pmw3389Error> {
+    pub fn read(&self, register: Pmw3389Register) -> Result<u16, Pmw3389Error> {
+        // Read either 1 or two registers, depending on if the value is 16 or 8 bit
+        let data = match register.to_register_read()? {
+            RegisterSize::Single(reg) => {
+                // Read register
+                let val = self.read_reg(reg, true)?;
+                // Return data
+                val as u16
+            }
+            RegisterSize::DoubleHighFirst(regl, regh) => {
+                // Read upper register
+                let upper = self.read_reg(regh, false)?;
+                // Read lower
+                let lower = self.read_reg(regl, true)?;
+                // Return data
+                u16::from_le_bytes([lower, upper])
+            }
+            RegisterSize::DoubleLowFirst(regl, regh) => {
+                // Read lower
+                let lower = self.read_reg(regl, true)?;
+                // Read upper register
+                let upper = self.read_reg(regh, false)?;
+                // Return data
+                u16::from_le_bytes([lower, upper])
+            }
+        };
+        // Return read data
+        Ok(data)
+    }
+
+    pub fn write(&self, value: u16, register: Pmw3389Register) -> Result<(), Pmw3389Error> {
+        // Write either 1 or two registers, depending on if the value is 16 or 8 bit
+        match register.to_register_write()? {
+            RegisterSize::Single(reg) => {
+                // Write register
+                self.write_reg(reg, value as u8, true)?;
+            }
+            RegisterSize::DoubleHighFirst(regl, regh) => {
+                // Split val
+                let [vall, valh] = value.to_le_bytes();
+                // Write upper register
+                self.write_reg(regh, valh, false)?;
+                // Write lower
+                self.write_reg(regl, vall, true)?;
+            }
+            RegisterSize::DoubleLowFirst(regl, regh) => {
+                // Split val
+                let [vall, valh] = value.to_le_bytes();
+                // Write lower
+                self.write_reg(regl, vall, true)?;
+                // Write upper register
+                self.write_reg(regh, valh, false)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn read_reg(&self, register: impl Into<u8>, end: bool) -> Result<u8, Pmw3389Error> {
         // Send adress of the register, with MSBit = 0 to indicate it's a read
         self.driver.spi_write(&[register.into() & 0x7f], false)?;
         self.driver.delay_us(160)?; // tSRAD
@@ -169,7 +221,64 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
     }
 }
 
-pub enum Register {
+/*
+0x00 ProductID R
+0x01 RevisionID R
+0x02 Motion RW
+0x03 DeltaXL R
+0x04 DeltaXH R
+0x05 DeltaYL R
+0x06 DeltaYH R
+0x07 SQUAL R
+0x08 RawDataSum R
+0x09 MaximumRawData R
+0x0A MinimumRawData R
+0x0B ShutterLower R
+0x0C ShutterUpper R
+0x0D RippleControl RW
+0x0E ResolutionL RW
+0x0F ResolutionH RW
+0x10 Config2 RW
+0x11 AngleTune RW
+0x12 FrameCapture RW
+0x13 SROMEnable W
+0x14 RunDownshift RW
+0x15 Rest1RateLower RW
+0x16 Rest1RateUpper RW
+0x17 Rest1Downshift RW
+0x18 Rest2RateLower RW
+0x19 Rest2RateUpper RW
+0x1A Rest2Downshift RW
+0x1B Rest3RateLower RW
+0x1C Rest3RateUpper RW
+0x24 Observation RW
+0x25 DataOutLower R
+0x26 DataOutUpper R
+0x2A SROMID R
+0x2B MinSQRun RW
+0x2C RawDataThreshold RW
+0x2D Control2 RW
+0x2E Config5L RW
+0x2F Config5H RW
+0X3A PowerUpReset W
+0x3B Shutdown W
+0x3F InverseProductID R
+0x41 LiftCutoffCal3 RW
+0x42 AngleSnap RW
+0x4A LiftCutoffCal1 RW
+0x50 MotionBurst RW
+0x62 SROMLoadBurst W
+0x63 LiftConfig RW
+0x64 RawDataBurst R
+0x65 LiftCutoffCal2 R
+0x71 LiftCutoffCalTimeout RW
+0x72 LiftCutoffCalMinLength RW
+0x73 PWMPeriodCnt RW
+0x74 PWMWidthCnt RW
+*/
+
+#[allow(unused)]
+pub(crate) enum Register {
     ProductId = 0x00,
     RevisionId = 0x01,
     Motion = 0x02,
@@ -177,13 +286,13 @@ pub enum Register {
     DeltaXH = 0x04,
     DeltaYL = 0x05,
     DeltaYH = 0x06,
-    SQUAL = 0x07,
+    Squal = 0x07,
     RawDataSum = 0x08,
     MaximumRawData = 0x09,
     MinimumRawData = 0x0A,
     ShutterLower = 0x0B,
     ShutterUpper = 0x0C,
-    Control = 0x0D,
+    RippleControl = 0x0D,
     ResolutionL = 0x0E,
     ResolutionH = 0x0F,
     Config2 = 0x10,
@@ -202,24 +311,27 @@ pub enum Register {
     Observation = 0x24,
     DataOutLower = 0x25,
     DataOutUpper = 0x26,
-    RawDataDump = 0x29,
     SromId = 0x2A,
-    MinSqRun = 0x2B,
+    MinSQRun = 0x2B,
     RawDataThreshold = 0x2C,
-    Config5 = 0x2F,
+    Control2 = 0x2D,
+    Config5L = 0x2E,
+    Config5H = 0x2F,
     PowerUpReset = 0x3A,
     Shutdown = 0x3B,
-    InverseProductId = 0x3F,
-    LiftCutoffTune3 = 0x41,
+    InverseProductID = 0x3F,
+    LiftCutoffCal3 = 0x41,
     AngleSnap = 0x42,
-    LiftCutoffTune1 = 0x4A,
+    LiftCutoffCal1 = 0x4A,
     MotionBurst = 0x50,
-    LiftCutoffTuneTimeout = 0x58,
-    LiftCutoffTuneMinLength = 0x5A,
     SromLoadBurst = 0x62,
     LiftConfig = 0x63,
     RawDataBurst = 0x64,
-    LiftCutoffTune2 = 0x65,
+    LiftCutoffCal2 = 0x65,
+    LiftCutoffCalTimeout = 0x71,
+    LiftCutoffCalMinLength = 0x72,
+    PWMPeriodCnt = 0x73,
+    PWMWidthCnt = 0x74,
 }
 
 impl Into<u8> for Register {
