@@ -1,3 +1,7 @@
+use core::panic;
+
+use pmw3389_driver::Pmw3389Register;
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum CommandError {
     InvalidCommandError = 0,
@@ -43,6 +47,10 @@ pub enum Command {
     Cpi2([u8; 4] /* Last 4 of keys array */),
     Lift1(u8 /* Mods */, [u8; 2] /* First 2 of keys array */),
     Lift2([u8; 4] /* Last 4 of keys array */),
+    SetSensorReg(u16 /* Value to set to */, Pmw3389Register),
+    GetSensorReg(Pmw3389Register),
+    SetPollingRate(u8 /* Number of ms between poll */),
+    StreamSensorImages,
     // Not to be sent by host, ever
     Loop(u16 /* Index */, (u8, [u8; 4])),
 }
@@ -51,20 +59,27 @@ impl Command {
     pub fn get_command(&self) -> (u8, [u8; 4]) {
         match self {
             // Sendable Commands
-            Command::SayHi => (0, [0; 4]),
-            Command::ReportScrollState(iters) => (1, iters.to_le_bytes()),
-            Command::Stop => (2, [0; 4]),
-            Command::LoremIpsum => (3, [0; 4]),
-            Command::Err(err) => (4, err.to_bytes()),
-            Command::GetSettings => (5, [0; 4]),
-            Command::SetDPI(dpi) => (6, dpi.to_le_bytes()),
-            Command::SaveSettings => (7, [0; 4]),
-            Command::Cpi1(mods, keys) => (8, [*mods, keys[0], keys[1], 0]),
-            Command::Cpi2(keys) => (9, *keys),
-            Command::Lift1(mods, keys) => (10, [*mods, keys[0], keys[1], 0]),
-            Command::Lift2(keys) => (11, *keys),
+            Self::SayHi => (0, [0; 4]),
+            Self::ReportScrollState(iters) => (1, iters.to_le_bytes()),
+            Self::Stop => (2, [0; 4]),
+            Self::LoremIpsum => (3, [0; 4]),
+            Self::Err(err) => (4, err.to_bytes()),
+            Self::GetSettings => (5, [0; 4]),
+            Self::SetDPI(dpi) => (6, dpi.to_le_bytes()),
+            Self::SaveSettings => (7, [0; 4]),
+            Self::Cpi1(mods, keys) => (8, [*mods, keys[0], keys[1], 0]),
+            Self::Cpi2(keys) => (9, *keys),
+            Self::Lift1(mods, keys) => (10, [*mods, keys[0], keys[1], 0]),
+            Self::Lift2(keys) => (11, *keys),
+            Self::SetSensorReg(val, reg) => {
+                let [val1, val2] = val.to_le_bytes();
+                (12, [val1, val2, reg.to_u8(), 0])
+            }
+            Self::GetSensorReg(reg) => (13, [reg.to_u8(), 0, 0, 0]),
+            Self::SetPollingRate(rate) => (14, [*rate, 0, 0, 0]),
+            Self::StreamSensorImages => (15, [0; 4]),
             // Info/State Commands
-            Command::Loop(_, _) => Command::Err(CommandError::InvalidCommand).get_command(),
+            Self::Loop(_, _) => Command::Err(CommandError::InvalidCommand).get_command(),
         }
     }
 
@@ -100,6 +115,19 @@ impl Command {
             (10, [mods, keys1, keys2, ..]) => Ok(Command::Lift1(*mods, [*keys1, *keys2])),
             // Lift 2
             (11, keys) => Ok(Command::Lift2(*keys)),
+            // Set Sensor Reg
+            (12, [val1, val2, reg, ..]) => Ok(Command::SetSensorReg(
+                u16::from_le_bytes([*val1, *val2]),
+                Pmw3389Register::from_u8(*reg).map_err(|_| CommandError::InvalidArgs)?,
+            )),
+            // Get Sensor Reg
+            (13, [reg, ..]) => Ok(Command::GetSensorReg(
+                Pmw3389Register::from_u8(*reg).map_err(|_| CommandError::InvalidArgs)?,
+            )),
+            // Set Polling Rate
+            (14, [rate, ..]) => Ok(Command::SetPollingRate(*rate)),
+            // Stream sensor image
+            (15, _) => Ok(Command::StreamSensorImages),
             // Nothing else matched, so it's an invalid command
             _ => Err(CommandError::InvalidCommand),
         }
@@ -114,6 +142,9 @@ pub enum Response {
     ScrollState(u8 /* State */),
     DataArray(u16 /* Length */, DataType),
     RawData([u8; 5]),
+    Data([u8; 3], DataType),
+    // Image endpoint
+    ImageData(&'static [u8]),
 }
 
 impl Response {
@@ -128,6 +159,8 @@ impl Response {
                 let [len0, len1] = len.to_le_bytes();
                 (4, [len0, len1, data as u8, 0])
             }
+            Response::Data(data, ty) => (5, [data[0], data[1], data[2], ty as u8]),
+            Response::ImageData(_) => panic!("Can't compress image data"),
         }
     }
 
@@ -149,6 +182,8 @@ impl Response {
                 u16::from_le_bytes([len0, len1]),
                 DataType::from(data)?,
             )),
+            // Data
+            (5, [data @ .., ty]) => Ok(Response::Data(data, DataType::from(ty)?)),
             // Nothing/Raw Data
             _ => Err(CommandError::InvalidResponse),
         }
@@ -160,6 +195,9 @@ pub enum DataType {
     String = 0,
     RGB = 1,
     Settings = 2,
+    Bool = 3,
+    U8 = 4,
+    U16 = 5,
 }
 
 impl DataType {
@@ -168,6 +206,9 @@ impl DataType {
             0 => Ok(Self::String),
             1 => Ok(Self::RGB),
             2 => Ok(Self::Settings),
+            3 => Ok(Self::Bool),
+            4 => Ok(Self::U8),
+            5 => Ok(Self::U16),
             _ => Err(CommandError::InvalidArgs),
         }
     }

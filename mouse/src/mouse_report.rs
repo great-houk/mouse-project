@@ -6,6 +6,7 @@ pub enum Reports {
     CpiReport = 0x02,
     LiftReport = 0x03,
     CommandResponse = 0x04,
+    SensorImage = 0x05,
 }
 
 #[gen_hid_descriptor(
@@ -64,6 +65,13 @@ pub enum Reports {
                 #[item_settings data,array] data=input;
             };
         };
+    },
+    (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x01) = {
+        (report_id = 0x05,) = {
+            (usage = 0x1, usage_min = 0x00, usage_max = 0xFF) = {
+                #[item_settings data,variable] large_data=input;
+            };
+        };
     }
 )]
 #[allow(dead_code)]
@@ -80,6 +88,8 @@ pub struct MouseReport {
     pub args: [u8; 4],
     pub response: u8,
     pub data: [u8; 4],
+    // Sensor Data
+    pub large_data: [u8; 63],
 }
 
 impl MouseReport {
@@ -105,6 +115,11 @@ impl MouseReport {
                 buf[2..6].copy_from_slice(&self.data);
                 // Length plus report ID byte
                 5 + 1
+            }
+            Reports::SensorImage => {
+                buf[1..64].copy_from_slice(&self.large_data);
+                // Length plus report ID byte
+                63 + 1
             }
         };
         &buf[..size]

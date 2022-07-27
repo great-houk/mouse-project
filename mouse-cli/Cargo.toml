@@ -9,3 +9,4 @@ edition = "2021"
 clap = { version = "3.2.12", features = ["derive"] }
 hidapi = "1.4.1"
 mouse-commands = { path = "../mouse-commands" }
+pmw3389-driver = { path = "../pmw3389-driver" }

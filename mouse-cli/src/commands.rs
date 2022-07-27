@@ -26,7 +26,25 @@ pub enum Commands {
     /// Proper voltage should be between 3.0v and 4.2v.
     #[clap(name = "bat")]
     Battery,
-    /// Says Hi :)
+    /// Says Hi 😎
     #[clap(name = "sayhi")]
     SayHi,
+    /// Sets the number of ms between polls. So 1 means 1000hz polling rate, 2 means 500, etc
+    #[clap(name = "poll-rate")]
+    PollingRate { rate: u8 },
+    /// Unsaveable options for fun :)
+    #[clap(name = "fun")]
+    Fun {
+        #[clap(subcommand)]
+        command: FunCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FunCommand {
+    /// Turns on/off the angle snap mode for the sensor,
+    /// making the mouse snap to 5 degree angles. Use with no arguments
+    /// to get whether or not it is enabled.
+    #[clap(name = "snap")]
+    AngleSnap { enabled: Option<bool> },
 }

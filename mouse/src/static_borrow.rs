@@ -17,6 +17,11 @@ impl<T: 'static> StaticBorrow<T> {
         unsafe { *self.inner.get() = Some(val) };
     }
 
+    /// Only safe to use so long as there are no other references to this
+    pub unsafe fn reset(&self) {
+        *self.inner.get() = None;
+    }
+
     pub fn borrow(&self) -> &'static T {
         assert!(unsafe { (*self.inner.get()).is_some() });
         unsafe { (*self.inner.get()).as_ref().unwrap() }

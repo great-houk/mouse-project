@@ -78,20 +78,6 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(buf.into())
     }
 
-    pub fn read_dpi(&self) -> Result<u32, Pmw3389Error> {
-        let value_h = self.read_reg(Register::ResolutionH, false)?;
-        let value_l = self.read_reg(Register::ResolutionL, true)?;
-        let dpi = 50 * u32::from_le_bytes([value_l, value_h, 0, 0]);
-        Ok(dpi)
-    }
-
-    pub fn set_dpi(&self, dpi: u32) -> Result<(), Pmw3389Error> {
-        let [low, high, ..] = (dpi / 50).to_le_bytes();
-        self.write_reg(Register::ResolutionH, high, false)?;
-        self.write_reg(Register::ResolutionL, low, true)?;
-        Ok(())
-    }
-
     pub fn read(&self, register: Pmw3389Register) -> Result<u16, Pmw3389Error> {
         // Read either 1 or two registers, depending on if the value is 16 or 8 bit
         let data = match register.to_register_read()? {

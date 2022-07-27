@@ -7,6 +7,7 @@ pub enum Pmw3389Error {
     FailedUpload,
     CantRead,
     CantWrite,
+    BadInput,
 }
 
 pub trait Pmw3389Driver {

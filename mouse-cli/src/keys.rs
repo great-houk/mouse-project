@@ -97,6 +97,7 @@ fn get_hashmaps() -> (HashMap<&'static str, u8>, HashMap<&'static str, u8>) {
      */
 
     let chars = HashMap::from([
+        ("NONE", 0x00),
         ("A", 0x04),          // Keyboard a and A
         ("B", 0x05),          // Keyboard b and B
         ("C", 0x06),          // Keyboard c and C

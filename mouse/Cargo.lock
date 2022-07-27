@@ -166,6 +166,9 @@ dependencies = [
 [[package]]
 name = "mouse-commands"
 version = "0.1.0"
+dependencies = [
+ "pmw3389-driver",
+]
 
 [[package]]
 name = "nb"

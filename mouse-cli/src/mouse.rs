@@ -1,5 +1,6 @@
 use hidapi::HidDevice;
 use mouse_commands::{Command, CommandError, DataType, Response};
+use pmw3389_driver::Pmw3389Register;
 
 pub struct Mouse {
     device: HidDevice,
@@ -153,6 +154,40 @@ impl Mouse {
         } else {
             Err(())
         }
+    }
+
+    pub fn get_angle_snap(&self) -> Result<bool, ()> {
+        // Send command
+        self.write(Command::GetSensorReg(Pmw3389Register::AngleSnap));
+        if let Ok(Response::Data(data, DataType::U16)) = self.read() {
+            let value = data[0] != 0;
+            Ok(value)
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn set_angle_snap(&self, enabled: bool) -> Result<(), ()> {
+        // Send command
+        let val;
+        if enabled {
+            val = 0b1000_0000;
+        } else {
+            val = 0;
+        }
+        self.write(Command::SetSensorReg(val, Pmw3389Register::AngleSnap));
+        if let Ok(Response::Ok) = self.read() {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn set_polling_rate(&self, rate: u8) {
+        // Send command
+        self.write(Command::SetPollingRate(rate))
+        // We should technically recieve an ok here, but since it disconnects first,
+        // there's no other choice besides assuming it worked.
     }
 }
 

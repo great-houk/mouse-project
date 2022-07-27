@@ -6,6 +6,7 @@ pub(crate) enum RegisterSize {
     DoubleLowFirst(Register, Register),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Pmw3389Register {
     ProductId,
     RevisionId,
@@ -46,6 +47,89 @@ pub enum Pmw3389Register {
 }
 
 impl Pmw3389Register {
+    pub fn to_u8(self) -> u8 {
+        match self {
+            Self::ProductId => 0x00,
+            Self::RevisionId => 0x01,
+            Self::Motion => 0x02,
+            Self::Squal => 0x07,
+            Self::RawDataSum => 0x08,
+            Self::MaximumRawData => 0x09,
+            Self::MinimumRawData => 0x0A,
+            Self::Shutter => 0x0B,
+            Self::RippleControl => 0x0D,
+            Self::Resolution => 0x0E,
+            Self::Config2 => 0x10,
+            Self::AngleTune => 0x11,
+            Self::RunDownshift => 0x14,
+            Self::Rest1Rate => 0x15,
+            Self::Rest1Downshift => 0x17,
+            Self::Rest2Rate => 0x18,
+            Self::Rest2Downshift => 0x1A,
+            Self::Rest3Rate => 0x1B,
+            Self::Observation => 0x24,
+            Self::SromId => 0x2A,
+            Self::MinSQRun => 0x2B,
+            Self::RawDataThreshold => 0x2C,
+            Self::Control2 => 0x2D,
+            Self::Config5 => 0x2E,
+            Self::PowerUpReset => 0x3A,
+            Self::Shutdown => 0x3B,
+            Self::InverseProductID => 0x3F,
+            Self::LiftCutoffCal3 => 0x41,
+            Self::AngleSnap => 0x42,
+            Self::LiftCutoffCal1 => 0x4A,
+            Self::LiftConfig => 0x63,
+            Self::LiftCutoffCal2 => 0x65,
+            Self::LiftCutoffCalTimeout => 0x71,
+            Self::LiftCutoffCalMinLength => 0x72,
+            Self::PWMPeriodCnt => 0x73,
+            Self::PWMWidthCnt => 0x74,
+        }
+    }
+
+    pub fn from_u8(val: u8) -> Result<Self, Pmw3389Error> {
+        Ok(match val {
+            0x00 => Self::ProductId,
+            0x01 => Self::RevisionId,
+            0x02 => Self::Motion,
+            0x07 => Self::Squal,
+            0x08 => Self::RawDataSum,
+            0x09 => Self::MaximumRawData,
+            0x0A => Self::MinimumRawData,
+            0x0B => Self::Shutter,
+            0x0D => Self::RippleControl,
+            0x0E => Self::Resolution,
+            0x10 => Self::Config2,
+            0x11 => Self::AngleTune,
+            0x14 => Self::RunDownshift,
+            0x15 => Self::Rest1Rate,
+            0x17 => Self::Rest1Downshift,
+            0x18 => Self::Rest2Rate,
+            0x1A => Self::Rest2Downshift,
+            0x1B => Self::Rest3Rate,
+            0x24 => Self::Observation,
+            0x2A => Self::SromId,
+            0x2B => Self::MinSQRun,
+            0x2C => Self::RawDataThreshold,
+            0x2D => Self::Control2,
+            0x2E => Self::Config5,
+            0x3A => Self::PowerUpReset,
+            0x3B => Self::Shutdown,
+            0x3F => Self::InverseProductID,
+            0x41 => Self::LiftCutoffCal3,
+            0x42 => Self::AngleSnap,
+            0x4A => Self::LiftCutoffCal1,
+            0x63 => Self::LiftConfig,
+            0x65 => Self::LiftCutoffCal2,
+            0x71 => Self::LiftCutoffCalTimeout,
+            0x72 => Self::LiftCutoffCalMinLength,
+            0x73 => Self::PWMPeriodCnt,
+            0x74 => Self::PWMWidthCnt,
+            _ => return Err(Pmw3389Error::BadInput),
+        })
+    }
+
     pub(crate) fn to_register_read(self) -> Result<RegisterSize, Pmw3389Error> {
         match self {
             Self::PowerUpReset | Self::Shutdown => Err(Pmw3389Error::CantRead),

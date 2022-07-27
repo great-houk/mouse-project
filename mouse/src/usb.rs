@@ -1,10 +1,13 @@
 use crate::{mouse_report::MouseReport, static_borrow::StaticBorrow, PID, VID};
-use core::cell::RefCell;
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicBool, Ordering},
+};
 use cortex_m::{
     asm,
     interrupt::{self as interruptm, CriticalSection, Mutex},
 };
-use max32625::{interrupt, ADC, CLKMAN, NVIC, PWRMAN, PWRSEQ, USB};
+use max32625::{interrupt, Interrupt, ADC, CLKMAN, NVIC, PWRMAN, PWRSEQ, USB};
 use max32625_usb::UsbBus;
 use usb_device::{
     class_prelude::UsbBusAllocator,
@@ -18,7 +21,8 @@ static USB_BUS: Mutex<RefCell<Option<UsbDevice<UsbBus>>>> = Mutex::new(RefCell::
 static USB_HID: Mutex<RefCell<Option<HIDClass<UsbBus>>>> = Mutex::new(RefCell::new(None));
 static HID_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
 static OUT_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
-static mut IS_READY: bool = false;
+static IS_READY: AtomicBool = AtomicBool::new(false);
+pub static mut POLLING_RATE: u8 = 1; // Number of ms per poll
 
 pub fn setup_usb(
     usb: USB,
@@ -35,7 +39,9 @@ pub fn setup_usb(
         let bus_allocator = USB_ALLOCATOR.borrow();
 
         *USB_HID.borrow(cs).borrow_mut() =
-            Some(HIDClass::new(bus_allocator, MouseReport::desc(), 1));
+            Some(HIDClass::new(bus_allocator, MouseReport::desc(), unsafe {
+                POLLING_RATE
+            }));
 
         *USB_BUS.borrow(cs).borrow_mut() = Some(
             UsbDeviceBuilder::new(bus_allocator, UsbVidPid(VID, PID))
@@ -49,7 +55,7 @@ pub fn setup_usb(
     // Enable interrupt
     unsafe {
         nvic.set_priority(interrupt::USB, 0);
-        max32625::NVIC::unmask(max32625::Interrupt::USB);
+        NVIC::unmask(Interrupt::USB);
     };
     // Wait for USB to complete setup
     while !is_ready() {
@@ -57,8 +63,35 @@ pub fn setup_usb(
     }
 }
 
+pub fn reset_usb() {
+    // Disable interrupt
+    NVIC::mask(Interrupt::USB);
+    // Get all necessary singletons
+    let periph = unsafe { max32625::Peripherals::steal() };
+    let usb = periph.USB;
+    let pwrman = &periph.PWRMAN;
+    let clkman = &periph.CLKMAN;
+    let pwrseq = &periph.PWRSEQ;
+    let adc = &periph.ADC;
+    let nvic = unsafe { &mut cortex_m::Peripherals::steal().NVIC };
+    // Disconnect USB
+    usb.cn.modify(|_, w| w.usb_en().clear_bit());
+    // Delay a sec to give host time to understand what's happening
+    cortex_m::asm::delay(100_000_000);
+    // Set all static to none, so there's no dangling pointers
+    interruptm::free(|cs| {
+        *USB_BUS.borrow(cs).borrow_mut() = None;
+
+        *USB_HID.borrow(cs).borrow_mut() = None;
+        // SAFTEY: No interrupts are allowed, so nothing can access the static mut
+        unsafe { USB_ALLOCATOR.reset() };
+    });
+    // Setup USB again
+    setup_usb(usb, pwrman, clkman, pwrseq, adc, nvic);
+}
+
 pub fn is_ready() -> bool {
-    unsafe { IS_READY }
+    IS_READY.load(Ordering::Relaxed)
 }
 
 pub fn is_naking() -> bool {
@@ -108,7 +141,10 @@ fn USB() {
             &mut *USB_HID.borrow(cs).borrow_mut(),
         ) {
             // Update setup status
-            unsafe { IS_READY = usb_dev.state() == UsbDeviceState::Configured };
+            IS_READY.store(
+                usb_dev.state() == UsbDeviceState::Configured,
+                Ordering::Relaxed,
+            );
             // Poll device
             usb_dev.poll(&mut [hid]);
             // Push HID report

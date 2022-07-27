@@ -1,5 +1,6 @@
 use crate::{commands::Commands, keys::map_string};
 use clap::Parser;
+use commands::FunCommand;
 use keys::map_keys;
 use mouse::Mouse;
 
@@ -45,7 +46,45 @@ fn main() {
         Commands::Save => save_settings(&mouse),
         Commands::Battery => get_battery_voltage(&mouse),
         Commands::SayHi => say_hi(&mouse),
+        Commands::Fun { command } => match command {
+            FunCommand::AngleSnap { enabled } => match enabled {
+                Some(enabled) => set_angle_snap(enabled, &mouse),
+                None => get_angle_snap(&mouse),
+            },
+        },
+        Commands::PollingRate { rate } => set_mouse_polling_rate(rate, &mouse),
     };
+}
+
+fn set_mouse_polling_rate(rate: u8, mouse: &Mouse) {
+    println!("Warning, this function is still really broken, and can only really be used once before you have to reset the mouse (at least on my windows pc).");
+    mouse.set_polling_rate(rate);
+    println!("Updated polling rate!");
+}
+
+fn get_angle_snap(mouse: &Mouse) {
+    let val = mouse.get_angle_snap();
+    if let Ok(val) = val {
+        if val {
+            println!("Angle snap is enabled!");
+        } else {
+            println!("Angle snap is disabled!");
+        }
+    } else {
+        println!("Failed to get angle snap!");
+    }
+}
+
+fn set_angle_snap(enabled: bool, mouse: &Mouse) {
+    if let Ok(()) = mouse.set_angle_snap(enabled) {
+        if enabled {
+            println!("Angle snap was enabled!");
+        } else {
+            println!("Angle snap was disabled!");
+        }
+    } else {
+        println!("Failed to set angle snap!");
+    }
 }
 
 fn say_hi(mouse: &Mouse) {
