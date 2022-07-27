@@ -2,6 +2,8 @@ use crate::{
     flash::{Flash, FlashData, FlashError},
     mouse_report::{MouseReport, Reports},
     sensor_driver::Pmw3389Driver,
+    static_borrow::StaticBorrow,
+    usb::{reset_usb, POLLING_RATE},
 };
 use core::cell::RefCell;
 use cortex_m::interrupt::{self as interruptm, Mutex};
@@ -12,9 +14,10 @@ use max32625_timer_basic::{Timer, TimerError};
 use mouse_commands::{Command, CommandError, DataType, Response};
 use mouse_error::*;
 use mouse_settings::*;
-use pmw3389_driver::{Pmw3389, Pmw3389Error};
+use pmw3389_driver::{Pmw3389, Pmw3389Error, Pmw3389Register};
 
 pub static MOUSE: Mutex<RefCell<Option<Mouse>>> = Mutex::new(RefCell::new(None));
+pub static IMAGE: StaticBorrow<[u8; 36 * 36]> = StaticBorrow::new();
 
 const LOREM_IPSUM: &str = "\
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, 
@@ -56,6 +59,8 @@ pub struct Mouse {
     flash: Flash<MouseSettings>,
     adc: Adc,
     bat_voltage: f32,
+    image_ready: bool,
+    image: &'static [u8],
 }
 
 impl Mouse {
@@ -101,7 +106,7 @@ impl Mouse {
         let settings = flash.get_data()?;
 
         // Update mouse sensor
-        sensor.set_dpi(settings.dpi as u32 * 50)?;
+        sensor.write(settings.dpi, Pmw3389Register::Resolution)?;
 
         // Setup ADC
         let adc = Adc::init(adc, clkman);
@@ -129,6 +134,8 @@ impl Mouse {
                 flash,
                 adc,
                 bat_voltage: 0.,
+                image_ready: false,
+                image: IMAGE.borrow(),
             });
         });
 
@@ -147,6 +154,7 @@ impl Mouse {
             args: [0; 4],
             response: 0,
             data: [0; 4],
+            large_data: [0; 63],
         };
         // Check if there is some command we still need to process
         self.process_pending_commands();
@@ -154,6 +162,9 @@ impl Mouse {
         let report_type = self.get_report_type();
         // Set fields in report based on type
         match report_type {
+            Reports::SensorImage => {
+                //...
+            }
             Reports::CommandResponse => {
                 // Send response
                 // Unwrap is ok, since the report type tells us there is a report to send
@@ -249,7 +260,10 @@ impl Mouse {
         // Dispose/Update command
         if let Some(command) = self.command {
             match command {
-                Command::LoremIpsum | Command::ReportScrollState(_) | Command::GetSettings => {
+                Command::LoremIpsum
+                | Command::ReportScrollState(_)
+                | Command::GetSettings
+                | Command::StreamSensorImages => {
                     self.command = Some(Command::Loop(0, command.get_command()))
                 }
                 Command::Loop(ind, com) => self.command = Some(Command::Loop(ind + 1, com)),
@@ -260,11 +274,14 @@ impl Mouse {
 
     fn get_report_type(&self) -> Reports {
         // Priorities:
-        // 1. Response to any commands with self.response
-        // 2. Send keyboard reports, lets say CPI first
-        // 3. Send other keyboard report, lift
-        // 4. Send normal mouse reports
-        if let Some(_) = self.response {
+        // 1. Respond to any sensor image requests
+        // 2. Response to any commands with self.response
+        // 3. Send keyboard reports, lets say CPI first
+        // 4. Send other keyboard report, lift
+        // 5. Send normal mouse reports
+        if self.image_ready {
+            Reports::SensorImage
+        } else if let Some(_) = self.response {
             Reports::CommandResponse
         } else if self.cpi.read() != self.cpi_pressed {
             Reports::CpiReport
@@ -288,7 +305,10 @@ impl Mouse {
             Command::SetDPI(dpi) => {
                 if *dpi < 16_000 && *dpi > 0 {
                     self.settings.dpi = (*dpi / 50) as u16;
-                    match self.sensor.set_dpi(*dpi) {
+                    match self
+                        .sensor
+                        .write(self.settings.dpi, Pmw3389Register::Resolution)
+                    {
                         Ok(_) => Response::Ok,
                         Err(_) => Response::Err(CommandError::SensorErr),
                     }
@@ -318,6 +338,23 @@ impl Mouse {
                 self.settings.lift_keys[2..].copy_from_slice(keys);
                 Response::Ok
             }
+            Command::SetSensorReg(val, reg) => match self.sensor.write(*val, *reg) {
+                Ok(_) => Response::Ok,
+                Err(_) => Response::Err(CommandError::SensorErr),
+            },
+            Command::GetSensorReg(reg) => match self.sensor.read(*reg) {
+                Ok(value) => {
+                    let [val1, val2] = value.to_le_bytes();
+                    Response::Data([val1, val2, 0], DataType::U16)
+                }
+                Err(_) => Response::Err(CommandError::SensorErr),
+            },
+            Command::SetPollingRate(rate) => {
+                unsafe { POLLING_RATE = *rate };
+                reset_usb();
+                Response::Ok
+            }
+            Command::StreamSensorImages => Response::Ok,
             // Loop
             Command::Loop(ind, (inner, args)) => {
                 // Get inner command
@@ -368,6 +405,19 @@ impl Mouse {
                                     _ => unreachable!(),
                                 })
                             } else {
+                                Response::Ok
+                            }
+                        }
+                        // Sensor image sender
+                        Command::StreamSensorImages => {
+                            let ind = ind * 63;
+                            let len = self.image.len();
+                            if ind < len {
+                                self.image_ready = true;
+                                let too = usize::min(ind + 63, len);
+                                Response::ImageData(&self.image[ind..too])
+                            } else {
+                                self.image_ready = false;
                                 Response::Ok
                             }
                         }
