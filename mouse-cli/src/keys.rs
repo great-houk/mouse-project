@@ -42,7 +42,8 @@ fn find_key_for_value<'a>(map: &'a HashMap<&'static str, u8>, value: u8) -> Opti
 
 pub fn map_string(input: String) -> Result<(u8, [u8; 6]), ParseError> {
     let tokens = input.split('+');
-    let (mod_map, key_map) = get_hashmaps();
+    let (mod_map, mut key_map) = get_hashmaps();
+    key_map.insert("NONE", 0x00);
     let mut keys = Vec::with_capacity(6);
     let mut mods = 0;
     // Parse all tokens
@@ -97,7 +98,6 @@ fn get_hashmaps() -> (HashMap<&'static str, u8>, HashMap<&'static str, u8>) {
      */
 
     let chars = HashMap::from([
-        ("NONE", 0x00),
         ("A", 0x04),          // Keyboard a and A
         ("B", 0x05),          // Keyboard b and B
         ("C", 0x06),          // Keyboard c and C

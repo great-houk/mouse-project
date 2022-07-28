@@ -22,6 +22,11 @@ impl<T: 'static> StaticBorrow<T> {
         *self.inner.get() = None;
     }
 
+    pub unsafe fn borrow_mut(&self) -> &'static mut T {
+        (*self.inner.get()).as_mut().unwrap()
+    }
+
+    /// Panics if not yet set
     pub fn borrow(&self) -> &'static T {
         assert!(unsafe { (*self.inner.get()).is_some() });
         unsafe { (*self.inner.get()).as_ref().unwrap() }

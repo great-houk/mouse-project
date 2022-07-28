@@ -10,6 +10,7 @@ pub enum CommandError {
     InvalidResponse = 3,
     SensorErr = 4,
     FlashErr = 5,
+    Busy = 6,
 }
 
 impl CommandError {
@@ -21,6 +22,7 @@ impl CommandError {
             (3, _) => Ok(Self::InvalidResponse),
             (4, _) => Ok(Self::SensorErr),
             (5, _) => Ok(Self::FlashErr),
+            (6, _) => Ok(Self::Busy),
             _ => Err(Self::InvalidCommandError),
         }
     }
@@ -33,7 +35,7 @@ impl CommandError {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Command {
     SayHi,
     ReportScrollState(u32 /* Iterations */),
@@ -50,7 +52,7 @@ pub enum Command {
     SetSensorReg(u16 /* Value to set to */, Pmw3389Register),
     GetSensorReg(Pmw3389Register),
     SetPollingRate(u8 /* Number of ms between poll */),
-    StreamSensorImages,
+    StreamSensorImages(u16 /* Number of Frames */),
     // Not to be sent by host, ever
     Loop(u16 /* Index */, (u8, [u8; 4])),
 }
@@ -77,7 +79,10 @@ impl Command {
             }
             Self::GetSensorReg(reg) => (13, [reg.to_u8(), 0, 0, 0]),
             Self::SetPollingRate(rate) => (14, [*rate, 0, 0, 0]),
-            Self::StreamSensorImages => (15, [0; 4]),
+            Self::StreamSensorImages(frames) => {
+                let [val0, val1] = frames.to_le_bytes();
+                (15, [val0, val1, 0, 0])
+            }
             // Info/State Commands
             Self::Loop(_, _) => Command::Err(CommandError::InvalidCommand).get_command(),
         }
@@ -127,7 +132,9 @@ impl Command {
             // Set Polling Rate
             (14, [rate, ..]) => Ok(Command::SetPollingRate(*rate)),
             // Stream sensor image
-            (15, _) => Ok(Command::StreamSensorImages),
+            (15, [val0, val1, ..]) => Ok(Command::StreamSensorImages(u16::from_le_bytes([
+                *val0, *val1,
+            ]))),
             // Nothing else matched, so it's an invalid command
             _ => Err(CommandError::InvalidCommand),
         }
@@ -144,7 +151,7 @@ pub enum Response {
     RawData([u8; 5]),
     Data([u8; 3], DataType),
     // Image endpoint
-    ImageData(&'static [u8]),
+    ImageData(u8 /* Ind */, &'static [u8]),
 }
 
 impl Response {
@@ -160,7 +167,7 @@ impl Response {
                 (4, [len0, len1, data as u8, 0])
             }
             Response::Data(data, ty) => (5, [data[0], data[1], data[2], ty as u8]),
-            Response::ImageData(_) => panic!("Can't compress image data"),
+            Response::ImageData(_, _) => panic!("Can't compress image data"),
         }
     }
 

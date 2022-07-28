@@ -9,4 +9,8 @@ edition = "2021"
 clap = { version = "3.2.12", features = ["derive"] }
 hidapi = "1.4.1"
 mouse-commands = { path = "../mouse-commands" }
+pixels = "0.9.0"
 pmw3389-driver = { path = "../pmw3389-driver" }
+winit = "0.26.0"
+winit_input_helper = "0.12.0"
+y4m = "0.7.0"

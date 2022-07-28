@@ -52,24 +52,27 @@ pub enum Reports {
     },
     (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x01) = {
         (report_id = 0x04,) = {
-            (usage = 0x1, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,variable] command=feature;
             };
-            (usage = 0x1, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,array] args=feature;
             };
-            (usage = 0x1, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,variable] response=input;
             };
-            (usage = 0x1, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,array] data=input;
             };
         };
     },
-    (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x01) = {
+    (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x02) = {
         (report_id = 0x05,) = {
-            (usage = 0x1, usage_min = 0x00, usage_max = 0xFF) = {
-                #[item_settings data,variable] large_data=input;
+            (usage = 0x02, usage_min = 0x00, usage_max = 0xFF) = {
+                #[item_settings data,variable] large_data_ind=input;
+            };
+            (usage = 0x02, usage_min = 0x00, usage_max = 0xFF) = {
+                #[item_settings data,array] large_data=input;
             };
         };
     }
@@ -89,7 +92,8 @@ pub struct MouseReport {
     pub response: u8,
     pub data: [u8; 4],
     // Sensor Data
-    pub large_data: [u8; 63],
+    pub large_data_ind: u8,
+    pub large_data: [u8; 62],
 }
 
 impl MouseReport {
@@ -117,7 +121,8 @@ impl MouseReport {
                 5 + 1
             }
             Reports::SensorImage => {
-                buf[1..64].copy_from_slice(&self.large_data);
+                buf[1] = self.large_data_ind;
+                buf[2..64].copy_from_slice(&self.large_data);
                 // Length plus report ID byte
                 63 + 1
             }

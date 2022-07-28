@@ -2,6 +2,7 @@ use crate::{regs::RegisterSize, Pmw3389Driver, Pmw3389Error, Pmw3389Register};
 
 pub struct Pmw3389<DRIVER: Pmw3389Driver> {
     driver: DRIVER,
+    is_setup: bool,
 }
 
 impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
@@ -22,7 +23,10 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
             9. Write to register 0x3D with a value of 0x00
             10. Load configuration for other registers
         */
-        let this = Self { driver };
+        let mut this = Self {
+            driver,
+            is_setup: false,
+        };
         // Step 1: Already Done
         // Step 2:
         this.driver.set_cs(false);
@@ -55,7 +59,52 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(this)
     }
 
+    pub fn get_frame(&mut self, buf: &mut [u8]) -> Result<(), Pmw3389Error> {
+        /*
+        1. The chip should be powered up and reset correctly (SROM download should be part of this powered up and reset
+            sequence - Refer to 6.1 Power-Up).
+        2. Wait for 250ms.
+        3. Write 0x00 to register 0x10
+        4. Write 0x83 to Frame_Capture register.
+        5. Write 0xC5 to Frame_Capture register.
+        6. Wait for 20ms.
+        7. Continue burst read from RawData_Burst register until all 1296 RawDatas are transferred.
+        8. Continue step 3 to 7 to capture another frame.
+        9. Write 0x20 to register 0x10.
+        */
+        // Steps 1-2 should be done already
+        // Step 3.
+        self.write_reg(Register::Config2, 0x00, true)?;
+        // Step 4.
+        self.write_reg(Register::FrameCapture, 0x83, true)?;
+        // Step 5.
+        self.write_reg(Register::FrameCapture, 0xC5, true)?;
+        // Step 6.
+        self.driver.delay_ms(5)?;
+        // Step 7.
+        self.driver
+            .spi_write(&[Register::RawDataBurst as u8], false)?;
+        self.driver.delay_us(35)?;
+        for i in 0..36 * 36 {
+            self.driver.spi_read(&mut buf[i..=i], false)?;
+            self.driver.delay_us(20)?;
+        }
+        self.driver.set_cs(false);
+        // Step 8 and on, we don't do, since we don't know how many we're gonna read
+        self.driver.delay_us(100)?;
+        Ok(())
+    }
+
+    pub fn reset_sensor(&mut self) -> Result<(), Pmw3389Error> {
+        self.write_reg(Register::Config2, 0x20, true)?;
+        self.write_reg(Register::PowerUpReset, 0x5A, true)?;
+        self.srom_download()
+    }
+
     pub fn read_motion_regs(&self) -> Result<MotionReport, Pmw3389Error> {
+        if !self.is_setup {
+            return Err(Pmw3389Error::NotInitialized);
+        }
         /*
             Steps to read from motion reg
             1. Write any value to motion register
@@ -79,6 +128,9 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
     }
 
     pub fn read(&self, register: Pmw3389Register) -> Result<u16, Pmw3389Error> {
+        if !self.is_setup {
+            return Err(Pmw3389Error::NotInitialized);
+        }
         // Read either 1 or two registers, depending on if the value is 16 or 8 bit
         let data = match register.to_register_read()? {
             RegisterSize::Single(reg) => {
@@ -109,6 +161,9 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
     }
 
     pub fn write(&self, value: u16, register: Pmw3389Register) -> Result<(), Pmw3389Error> {
+        if !self.is_setup {
+            return Err(Pmw3389Error::NotInitialized);
+        }
         // Write either 1 or two registers, depending on if the value is 16 or 8 bit
         match register.to_register_write()? {
             RegisterSize::Single(reg) => {
@@ -163,7 +218,7 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(())
     }
 
-    fn srom_download(&self) -> Result<(), Pmw3389Error> {
+    fn srom_download(&mut self) -> Result<(), Pmw3389Error> {
         /*
             SROM Download Steps
             1. Perform Steps 1 through 5 of the power up
@@ -203,6 +258,8 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         if id == 0x00 {
             return Err(Pmw3389Error::FailedUpload);
         }
+        // Make this setup
+        self.is_setup = true;
         Ok(())
     }
 }

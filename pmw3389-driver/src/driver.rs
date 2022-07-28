@@ -8,6 +8,8 @@ pub enum Pmw3389Error {
     CantRead,
     CantWrite,
     BadInput,
+    BufOverflow,
+    NotInitialized,
 }
 
 pub trait Pmw3389Driver {

@@ -183,7 +183,7 @@ impl_spims! { SpiTransaction<'a> _SPI : mod spi_trans
         // Send pages
         while Self::should_use_pages(size - sent) {
             let pages = self.calc_num_pages(size - sent);
-            let bytes = pages * self.slave.page_size.as_u16();
+            let bytes = if pages == 0 { 32 } else { pages } * self.slave.page_size.as_u16();
             let end = if (sent + bytes) == size { self.end } else { false };
             let header = Self::gen_header(NONE_DIR, SpiSizeUnits::Pages, pages, end);
             self.spim.push_trans(header);
@@ -209,7 +209,7 @@ impl_spims! { SpiTransaction<'a> _SPI : mod spi_trans
         // Send pages
         while Self::should_use_pages(size - sent) {
             let pages = self.calc_num_pages(size - sent);
-            let bytes = pages * self.slave.page_size.as_u16();
+            let bytes = if pages == 0 { 32 } else { pages } * self.slave.page_size.as_u16();
             // Push header
             let end = if (sent + bytes) == size { self.end } else { false };
             let header = Self::gen_header(TX_DIR, SpiSizeUnits::Pages, pages, end);
@@ -244,7 +244,7 @@ impl_spims! { SpiTransaction<'a> _SPI : mod spi_trans
         // Send pages
         while Self::should_use_pages(size - sent) {
             let pages = self.calc_num_pages(size - sent);
-            let bytes = pages * self.slave.page_size.as_u16();
+            let bytes = if pages == 0 { 32 } else { pages } * self.slave.page_size.as_u16();
             // Push header
             let end = if (sent + bytes) == size { self.end } else { false };
             let header = Self::gen_header(RX_DIR, SpiSizeUnits::Pages, pages, end);
@@ -283,7 +283,7 @@ impl_spims! { SpiTransaction<'a> _SPI : mod spi_trans
         // Send pages
         while Self::should_use_pages(size - sent) {
             let pages = self.calc_num_pages(size - sent);
-            let bytes = pages * self.slave.page_size.as_u16();
+            let bytes = if pages == 0 { 32 } else { pages } * self.slave.page_size.as_u16();
             // Push header
             let end = if (sent + bytes) == size { self.end } else { false };
             let header = Self::gen_header(BOTH_DIR, SpiSizeUnits::Pages, pages, end);

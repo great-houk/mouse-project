@@ -1,14 +1,21 @@
+use core::panic;
+
 use hidapi::HidDevice;
 use mouse_commands::{Command, CommandError, DataType, Response};
 use pmw3389_driver::Pmw3389Register;
 
+const COMMAND_REPORT_ID: u8 = 0x04;
+const COMMAND_USAGE: u16 = 0x01;
+const _SENSOR_IMAGE_ID: u8 = 0x05;
+const IMAGE_USAGE: u16 = 0x02;
+
 pub struct Mouse {
     device: HidDevice,
-    report_id: u8,
+    image: HidDevice,
 }
 
 impl Mouse {
-    pub fn connect(vid: u16, pid: u16, usage_page: u16, report_id: u8) -> Mouse {
+    pub fn connect(vid: u16, pid: u16, usage_page: u16) -> Mouse {
         let api = hidapi::HidApi::new().unwrap();
         // Find mouse
         let mut mouse = None;
@@ -16,17 +23,36 @@ impl Mouse {
             if device.vendor_id() == vid
                 && device.product_id() == pid
                 && device.usage_page() == usage_page
+                && device.usage() == COMMAND_USAGE
             {
                 mouse = Some(device);
                 break;
             }
         }
         let mouse = mouse.expect("Couldn't Connect to Mouse, maybe VID/PID/usage_page are wrong?");
+        // Find image pipe
+        let mut image = None;
+        for device in api.device_list() {
+            if device.vendor_id() == vid
+                && device.product_id() == pid
+                && device.usage_page() == usage_page
+                && device.usage() == IMAGE_USAGE
+            {
+                image = Some(device);
+                break;
+            }
+        }
+        let image = image.expect("Couldn't Connect to Mouse, maybe VID/PID/usage_page are wrong?");
 
         // Connect to device using its VID and PID
         let device = api.open_path(mouse.path()).unwrap();
         device.set_blocking_mode(true).unwrap();
-        Mouse { device, report_id }
+
+        // Connect to image path
+        let image = api.open_path(image.path()).unwrap();
+        image.set_blocking_mode(true).unwrap();
+
+        Mouse { device, image }
     }
 
     pub fn set_dpi(&self, dpi: u32) {
@@ -189,6 +215,35 @@ impl Mouse {
         // We should technically recieve an ok here, but since it disconnects first,
         // there's no other choice besides assuming it worked.
     }
+
+    pub fn start_frame_read(&self, frames: u16) -> Result<(), ()> {
+        // Send command
+        self.write(Command::StreamSensorImages(frames));
+
+        if self.read() != Ok(Response::Ok) {
+            panic!("Failed Read");
+        }
+
+        Ok(())
+    }
+
+    pub fn read_frame(&mut self) -> Result<Vec<u8>, ()> {
+        let mut buf = [0; 64];
+        let mut ind = None;
+        let mut ret = Vec::with_capacity(21);
+
+        while ind == None || ind < Some(20) {
+            self.image.read(&mut buf[..]).unwrap();
+            // println!("{buf:?}");
+            ind = Some(buf[1] as usize);
+            while ret.len() < ind.unwrap() * 62 {
+                ret.push(0);
+            }
+            ret.extend_from_slice(&buf[2..]);
+        }
+        ret.resize(36 * 36, 0);
+        Ok(ret)
+    }
 }
 
 mod hardware {
@@ -196,7 +251,7 @@ mod hardware {
     impl Mouse {
         pub fn write(&self, command: Command) {
             // Write data to device
-            let mut buf = [self.report_id; 6];
+            let mut buf = [COMMAND_REPORT_ID; 6];
             let (command, args) = command.get_command();
             buf[1] = command;
             buf[2..].copy_from_slice(&args);
