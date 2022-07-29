@@ -1,0 +1,7 @@
+(fp_lib_table
+  (lib (name "Mouse Encoder")(type "KiCad")(uri "${KIPRJMOD}/footprints/encoder_footprint.pretty")(options "")(descr ""))
+  (lib (name "Antenna")(type "KiCad")(uri "${KIPRJMOD}/footprints/antenna.pretty")(options "")(descr ""))
+  (lib (name "MAX32625")(type "KiCad")(uri "${KIPRJMOD}/footprints/MAX32625/footprints.pretty")(options "")(descr ""))
+  (lib (name "MAX8819")(type "KiCad")(uri "${KIPRJMOD}/footprints/MAX8819")(options "")(descr ""))
+  (lib (name "CM1231-02SO")(type "KiCad")(uri "${KIPRJMOD}/footprints/CM1231-02SO/footprints.pretty")(options "")(descr ""))
+)

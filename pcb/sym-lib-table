@@ -1,0 +1,10 @@
+(sym_lib_table
+  (lib (name "JTAG Port")(type "KiCad")(uri "C:/Users/Tyler/Downloads/ul_FTSH-105-01-L-DV-K-TR/KiCAD/2022-02-12_05-40-19/2022-02-12_05-40-19.kicad_sym")(options "")(descr "")(disabled))
+  (lib (name "SR1020")(type "KiCad")(uri "${KIPRJMOD}/footprints/SR1020.kicad_sym")(options "")(descr ""))
+  (lib (name "Balun")(type "KiCad")(uri "C:/Users/Tyler/Downloads/ul_HHM1595A1/KiCAD/2022-02-19_22-42-56/2022-02-19_22-42-56.kicad_sym")(options "")(descr "")(disabled))
+  (lib (name "ATSAMD11D")(type "KiCad")(uri "C:/Users/Tyler/Downloads/ul_ATSAMD11C14A-SSNT/KiCAD/2022-03-02_23-58-35/2022-03-02_23-58-35.kicad_sym")(options "")(descr "")(disabled))
+  (lib (name "MAX8819CETI")(type "KiCad")(uri "${KIPRJMOD}/footprints/MAX8819/MAX8819CETI_.kicad_sym")(options "")(descr ""))
+  (lib (name "CM1231")(type "KiCad")(uri "${KIPRJMOD}/footprints/CM1231-02SO/2022-04-30_04-07-41.kicad_sym")(options "")(descr ""))
+  (lib (name "MAX32625")(type "KiCad")(uri "${KIPRJMOD}/footprints/MAX32625/2022-04-30_03-57-22.kicad_sym")(options "")(descr ""))
+  (lib (name "pmw3360dm-t2qu")(type "KiCad")(uri "${KIPRJMOD}/footprints/PMW3389/pmw3360dm-t2qu.kicad_sym")(options "")(descr ""))
+)
