@@ -12,6 +12,13 @@ Future versions of this project won't use a barebones $15 dollar mouse off of am
 
 This is the mouse I bought and used as a base: [Amazon Link](https://www.amazon.com/gp/product/B07ZHFCM43/ref=ppx_yo_dt_b_search_asin_title?ie=UTF8&th=1)
 
+For obtaining the other parts:
+1. Most mouse parts can be desoldered from the mouse itself. I only bought one switch for the dongle off of digikey.
+2. All other digital parts except the sensor can be obtained from digikey for reasonable prices, and the objects in the Kicad PCB should have digikey links associated with them already.
+3. The mouse sensor is hard to get. If you are a student like me, you might be able to get a free sample from Pixart. If you aren't there are a couple of ebay postings or other second hand sellers which might offer them, but they take a while (>month normally) to ship. Pixart does offer to sell the sensors directly, but there is a minimum order quantity of 25.
+4. I used JLCPCB to obtain the PCB. I had them make a stencil as well, in order to greatly simply to soldering process. For anyone in the US, chances are JLC is your best bet, for Europe, I've heard of other cheap PCB manufacturers which might do a better job, as long as the shipping isn't prohibitively expensive.
+5. Programming the MCU. I used the [MCU Link](https://www.nxp.com/design/microcontrollers-developer-resources/mcu-link-debug-probe:MCU-LINK) with OpenOCD to program the chip, which had all the features I ended up needing.
+
 The PCB is specifically designed around fitting in the mouse, and even then there were some mistakes I made. Most notably, the top right post hole was misplaced, so that needs to be cut flush so the PCB can rest flat. The antenna also sticks out the side, so you need to cut some small segments off of the casing in order to have it fit. Finally, the USB-C port is in a slightly lower and different place, so you need to cut the sides of the USB port out to have it fit and be accessible.
 
 It took me many tries to assemble this properly, partially because it was my first time using solder past (which by the way is 100% what you need to use to solder this), and partially because there are no good resources out there for solder of this kind, at least that I could find. If you order the PCB from JLCPCB like I did, make sure to get a stencil, as it will make everything signifigantly easier. There is no need to order a stencil for the back, however, that only requires some careful soldering.
