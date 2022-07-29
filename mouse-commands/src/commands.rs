@@ -53,6 +53,7 @@ pub enum Command {
     GetSensorReg(Pmw3389Register),
     SetPollingRate(u8 /* Number of ms between poll */),
     StreamSensorImages(u16 /* Number of Frames */),
+    ResetSensor,
     // Not to be sent by host, ever
     Loop(u16 /* Index */, (u8, [u8; 4])),
 }
@@ -83,6 +84,7 @@ impl Command {
                 let [val0, val1] = frames.to_le_bytes();
                 (15, [val0, val1, 0, 0])
             }
+            Self::ResetSensor => (16, [0; 4]),
             // Info/State Commands
             Self::Loop(_, _) => Command::Err(CommandError::InvalidCommand).get_command(),
         }
@@ -135,6 +137,8 @@ impl Command {
             (15, [val0, val1, ..]) => Ok(Command::StreamSensorImages(u16::from_le_bytes([
                 *val0, *val1,
             ]))),
+            // Reset Sensor
+            (16, _) => Ok(Command::ResetSensor),
             // Nothing else matched, so it's an invalid command
             _ => Err(CommandError::InvalidCommand),
         }

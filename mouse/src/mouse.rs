@@ -368,6 +368,19 @@ impl Mouse {
                     }
                     Response::Ok
                 }
+                Command::ResetSensor => {
+                    // Reset sensor
+                    if let Err(_) = self.sensor.reset_sensor() {
+                        Response::Err(CommandError::SensorErr)
+                    } else if let Err(_) = self
+                        .sensor
+                        .write(self.settings.dpi, Pmw3389Register::Resolution)
+                    {
+                        Response::Err(CommandError::SensorErr)
+                    } else {
+                        Response::Ok
+                    }
+                }
                 // Loop
                 Command::Loop(ind_mut, (inner, args)) => {
                     // Get inner command
@@ -423,7 +436,7 @@ impl Mouse {
                                 }
                             }
                             // Sensor image sender
-                            Command::StreamSensorImages(mut frames) => {
+                            Command::StreamSensorImages(frames) => {
                                 if frames != 1 {
                                     // Get indices
                                     let mut ind = ind * 62;
@@ -434,9 +447,8 @@ impl Mouse {
                                         ind = 0;
                                         *ind_mut = 0;
                                         // Progress frames, as long as we aren't infinite
-                                        if frames != 0 {
-                                            frames -= 1;
-                                            [args[0], args[1]] = frames.to_le_bytes();
+                                        if frames > 0 {
+                                            [args[0], args[1]] = (frames - 1).to_le_bytes();
                                         }
                                     }
                                     // Make sure we don't need a new image
@@ -452,17 +464,7 @@ impl Mouse {
                                     let too = usize::min(ind + 62, len);
                                     Response::ImageData((*ind_mut) as u8, &IMAGE.borrow()[ind..too])
                                 } else {
-                                    // Reset sensor
-                                    if let Err(_) = self.sensor.reset_sensor() {
-                                        Response::Err(CommandError::SensorErr)
-                                    } else if let Err(_) = self
-                                        .sensor
-                                        .write(self.settings.dpi, Pmw3389Register::Resolution)
-                                    {
-                                        Response::Err(CommandError::SensorErr)
-                                    } else {
-                                        Response::Ok
-                                    }
+                                    Response::Ok
                                 }
                             }
                             // Anything else is an error

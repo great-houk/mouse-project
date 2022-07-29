@@ -3,7 +3,6 @@ use clap::Parser;
 use commands::{FunCommand, RecordCommand};
 use keys::map_keys;
 use mouse::Mouse;
-use mouse_commands::Command;
 use pixels::{Pixels, SurfaceTexture};
 use std::{fs::File, time::Instant};
 use winit::{
@@ -35,6 +34,16 @@ struct Cli {
 fn main() {
     // Get CLI input
     let cli = Cli::parse();
+    // let cli = Cli {
+    //     vid: 0x16C0,
+    //     pid: 0x27DD,
+    //     usage_page: 0xFF00,
+    //     command: Commands::Fun {
+    //         command: FunCommand::Record {
+    //             command: RecordCommand::Live,
+    //         },
+    //     },
+    // };
     // Connect to mouse
     let mut mouse = Mouse::connect(cli.vid, cli.pid, cli.usage_page);
     // Match command
@@ -74,8 +83,9 @@ fn main() {
 fn display_mouse_frames(mut mouse: Mouse) {
     // Start frame reading
     mouse.start_frame_read(0).unwrap();
+    let mut done = false;
     // Make window
-    const MULT: usize = 10;
+    const MULT: usize = 20;
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
     let window = {
@@ -98,10 +108,11 @@ fn display_mouse_frames(mut mouse: Mouse) {
         if let Event::RedrawRequested(_) = event {
             // Get the current frame
             let frame_data = mouse.read_frame().unwrap();
+            // Update frame buffer
             let frame_buffer = pixels.get_frame().chunks_exact_mut(4).enumerate();
             for (i, rgb) in frame_buffer {
-                let x = (i % (36 * MULT)) / MULT;
-                let y = (i / (36 * MULT)) / MULT;
+                let x = 35 - (i / (36 * MULT)) / MULT;
+                let y = (i % (36 * MULT)) / MULT;
                 let f_ind = x + y * 36;
                 rgb[0] = frame_data[f_ind];
                 rgb[1] = frame_data[f_ind];
@@ -132,32 +143,33 @@ fn display_mouse_frames(mut mouse: Mouse) {
         }
 
         // Handle exit
-        if *control_flow == ControlFlow::Exit {
+        if !done && *control_flow == ControlFlow::Exit {
             // Stop Mouse
-            for _ in 0..10 {
-                mouse.write(Command::StreamSensorImages(1))
-            }
+            mouse.end_frame_read().unwrap();
             // Print
             println!("Done!");
+            done = true;
         }
     });
 }
 
 fn record_mouse_frames(path: String, iters: u16, mouse: &mut Mouse) {
     // Start frame reading
-    mouse.start_frame_read(iters).unwrap();
-    // Make file
-    let file = File::create("./{path}").unwrap();
     let now = Instant::now();
+    mouse.start_frame_read(iters).unwrap();
     // Generate Frames
     let mut frames = Vec::new();
     for _ in 0..iters {
         let frame_data = mouse.read_frame().unwrap();
         frames.push(frame_data);
     }
+    // Finish
+    mouse.end_frame_read().unwrap();
     // Get FPS
     let time = now.elapsed().as_millis();
     let fps = f32::round((iters as f32 * 1000.0) / time as f32) as usize;
+    // Make file
+    let file = File::create(format!("./{path}")).unwrap();
     // Start encoding
     let mut enc = y4m::encode(36, 36, Ratio::new(fps, 1))
         .with_colorspace(y4m::Colorspace::Cmono)

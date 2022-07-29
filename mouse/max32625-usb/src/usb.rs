@@ -340,9 +340,11 @@ impl Usb {
         } else if self.dev_intfl.read().ep_in().bit()
             || self.dev_intfl.read().ep_out().bit()
             || self.dev_intfl.read().setup().bit()
+            || self.out_owner.read().buf0_owner().bits() != 0xF
         {
             // There has been some packet activity
-            let ep_out = self.out_int.read().bits() as u16;
+            let ep_out = self.out_int.read().bits() as u16
+                | (!self.out_owner.read().buf0_owner().bits()) as u16;
             let ep_in_complete = self.in_int.read().bits() as u16;
             let ep_setup = self.dev_intfl.read().setup().bit() as u16;
             // Keep track of state, and accept control transfer.

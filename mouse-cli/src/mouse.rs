@@ -244,6 +244,17 @@ impl Mouse {
         ret.resize(36 * 36, 0);
         Ok(ret)
     }
+
+    pub fn end_frame_read(&self) -> Result<(), ()> {
+        // Send command
+        self.write(Command::ResetSensor);
+
+        if self.read() != Ok(Response::Ok) {
+            panic!("Failed Read");
+        }
+
+        Ok(())
+    }
 }
 
 mod hardware {
