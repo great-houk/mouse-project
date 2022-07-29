@@ -29,7 +29,7 @@ pub enum Commands {
     /// Says Hi 😎
     #[clap(name = "sayhi")]
     SayHi,
-    /// Sets the number of ms between polls. So 1 means 1000hz polling rate, 2 means 500, etc
+    /// Do not use unless you really want to, this is very buggy still. Sets the number of ms between polls. So 1 means 1000hz polling rate, 2 means 500, etc.
     #[clap(name = "poll-rate")]
     PollingRate { rate: u8 },
     /// Unsaveable options for fun :)

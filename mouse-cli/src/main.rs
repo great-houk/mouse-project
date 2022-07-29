@@ -34,16 +34,6 @@ struct Cli {
 fn main() {
     // Get CLI input
     let cli = Cli::parse();
-    // let cli = Cli {
-    //     vid: 0x16C0,
-    //     pid: 0x27DD,
-    //     usage_page: 0xFF00,
-    //     command: Commands::Fun {
-    //         command: FunCommand::Record {
-    //             command: RecordCommand::Live,
-    //         },
-    //     },
-    // };
     // Connect to mouse
     let mut mouse = Mouse::connect(cli.vid, cli.pid, cli.usage_page);
     // Match command
