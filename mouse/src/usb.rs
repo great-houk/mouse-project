@@ -1,4 +1,8 @@
-use crate::{mouse_report::MouseReport, static_borrow::StaticBorrow, PID, VID};
+use crate::{
+    mouse_report::{CommandReport, MouseReport, Reports, SensorReport},
+    static_borrow::StaticBorrow,
+    PID, VID,
+};
 use core::{
     cell::RefCell,
     sync::atomic::{AtomicBool, Ordering},
@@ -14,15 +18,27 @@ use usb_device::{
     device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
     UsbError,
 };
-use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
+use usbd_hid::{
+    descriptor::{KeyboardReport, SerializedDescriptor},
+    hid_class::HIDClass,
+};
 
 static USB_ALLOCATOR: StaticBorrow<UsbBusAllocator<UsbBus>> = StaticBorrow::new();
 static USB_BUS: Mutex<RefCell<Option<UsbDevice<UsbBus>>>> = Mutex::new(RefCell::new(None));
-static USB_HID: Mutex<RefCell<Option<HIDClass<UsbBus>>>> = Mutex::new(RefCell::new(None));
-static HID_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
+static USB_HID: Mutex<RefCell<Option<[HIDClass<UsbBus>; 2]>>> = Mutex::new(RefCell::new(None));
+static HID_REPORT: Mutex<RefCell<Option<Reports>>> = Mutex::new(RefCell::new(None));
 static OUT_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
 static IS_READY: AtomicBool = AtomicBool::new(false);
 pub static mut POLLING_RATE: u8 = 1; // Number of ms per poll
+
+const MOUSE_IND: usize = 0;
+const CPI_IND: usize = 1;
+const LIFT_IND: usize = 0;
+const COMMAND_IND: usize = 0;
+const SENSOR_IND: usize = 0;
+// const LIFT_IND: usize = 2;
+// const COMMAND_IND: usize = 3;
+// const SENSOR_IND: usize = 4;
 
 pub fn setup_usb(
     usb: USB,
@@ -38,14 +54,24 @@ pub fn setup_usb(
         USB_ALLOCATOR.set(UsbBus::new(usb, pwrman, clkman, pwrseq, adc));
         let bus_allocator = USB_ALLOCATOR.borrow();
 
-        *USB_HID.borrow(cs).borrow_mut() =
-            Some(HIDClass::new(bus_allocator, MouseReport::desc(), unsafe {
-                POLLING_RATE
-            }));
+        let polling_rate = unsafe { POLLING_RATE };
+        let hids = [
+            // Mouse
+            HIDClass::new_ep_in(bus_allocator, MouseReport::desc(), polling_rate),
+            // CPI
+            HIDClass::new_ep_in(bus_allocator, KeyboardReport::desc(), polling_rate),
+            // // Lift
+            // HIDClass::new_ep_in(bus_allocator, KeyboardReport::desc(), polling_rate),
+            // // Command
+            // HIDClass::new_ep_in(bus_allocator, CommandReport::desc(), polling_rate),
+            // // Sensor
+            // HIDClass::new_ep_in(bus_allocator, SensorReport::desc(), polling_rate),
+        ];
+        *USB_HID.borrow(cs).borrow_mut() = Some(hids);
 
         *USB_BUS.borrow(cs).borrow_mut() = Some(
             UsbDeviceBuilder::new(bus_allocator, UsbVidPid(VID, PID))
-                .manufacturer("lmaoooo")
+                .manufacturer("Me")
                 .product("Awesome Mouse 😎")
                 .serial_number("PROTO V1")
                 .max_power(500)
@@ -110,7 +136,7 @@ pub fn can_push_hid() -> bool {
     interruptm::free(|cs| HID_REPORT.borrow(cs).borrow().is_none())
 }
 
-pub fn push_hid(report: &'static [u8]) -> Result<(), UsbError> {
+pub fn push_hid(report: Reports) -> Result<(), UsbError> {
     interruptm::free(|cs| {
         if HID_REPORT.borrow(cs).borrow().is_some() {
             Err(UsbError::WouldBlock)
@@ -146,15 +172,22 @@ fn USB() {
                 Ordering::Relaxed,
             );
             // Poll device
-            usb_dev.poll(&mut [hid]);
-            // Push HID report
+            let [hid0, hid1] = hid; //, hid2, hid3, hid4] = hid;
+            usb_dev.poll(&mut [hid0, hid1]); //, hid2, hid3, hid4]);
+                                             // Push HID report
             if let Some(report) = HID_REPORT.borrow(cs).borrow_mut().take() {
-                let _ = hid.push_raw_input(&report);
+                let _ = match report {
+                    Reports::Mouse(report) => hid[MOUSE_IND].push_input(&report),
+                    Reports::KeyboardCpi(report) => hid[CPI_IND].push_input(&report),
+                    Reports::KeyboardLift(report) => hid[LIFT_IND].push_input(&report),
+                    Reports::Command(report) => hid[COMMAND_IND].push_input(&report),
+                    Reports::SensorImage(report) => hid[SENSOR_IND].push_input(&report),
+                };
             }
-            // Pull HID Report
+            // Pull HID Report from command, since that's the only one we care about
             static mut BUF: [u8; 128] = [0; 128];
             if OUT_REPORT.borrow(cs).borrow().is_none() {
-                if let Ok(info) = hid.pull_raw_report(unsafe { &mut BUF }) {
+                if let Ok(info) = hid[COMMAND_IND].pull_raw_report(unsafe { &mut BUF }) {
                     *OUT_REPORT.borrow(cs).borrow_mut() = Some(unsafe { &BUF[..info.len] })
                 };
             }

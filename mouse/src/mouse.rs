@@ -1,6 +1,8 @@
 use crate::{
     flash::{Flash, FlashData, FlashError},
-    mouse_report::{MouseReport, Reports},
+    mouse_report::{
+        CommandReport, KeyboardReport, MouseReport, ReportTypes, Reports, SensorReport,
+    },
     sensor_driver::Pmw3389Driver,
     static_borrow::StaticBorrow,
     usb::{reset_usb, POLLING_RATE},
@@ -141,64 +143,74 @@ impl Mouse {
         Ok(())
     }
 
-    pub fn get_mouse_report<'a>(&mut self, buf: &'a mut [u8]) -> &'a [u8] {
-        let mut report = MouseReport {
-            buttons: 0,
-            x: 0,
-            y: 0,
-            wheel: 0,
-            keys: [0; 6],
-            modifier: 0,
-            command: 0,
-            args: [0; 4],
-            response: 0,
-            data: [0; 4],
-            large_data_ind: 0,
-            large_data: [0; 62],
-        };
+    pub fn get_mouse_report<'a>(&mut self) -> Reports {
         // Check if there is some command we still need to process
         self.process_pending_commands();
         // Get which report to send
         let report_type = self.get_report_type();
-        // Set fields in report based on type
+        // Return Proper Report Type
         match report_type {
-            Reports::SensorImage => {
+            ReportTypes::SensorImage => {
                 // Send response
                 // Panic is ok, since the report type tells us there is a report to send
-                if let Some(Response::ImageData(ind, data)) = self.response.take() {
-                    report.large_data_ind = ind;
-                    report.large_data[..data.len()].copy_from_slice(data);
+                if let Some(Response::ImageData(large_data_ind, data)) = self.response.take() {
+                    let mut large_data = [0; 62];
+                    large_data[..data.len()].copy_from_slice(data);
+                    Reports::SensorImage(SensorReport {
+                        large_data_ind,
+                        large_data,
+                    })
                 } else {
                     unreachable!("This should never happen...");
                 }
             }
-            Reports::CommandResponse => {
+            ReportTypes::CommandResponse => {
                 // Send response
                 // Unwrap is ok, since the report type tells us there is a report to send
-                (report.response, report.data) = self.response.take().unwrap().get_response();
+                let (response, data) = self.response.take().unwrap().get_response();
+                Reports::Command(CommandReport {
+                    command: 0,
+                    args: [0; 4],
+                    response,
+                    data,
+                })
             }
-            Reports::CpiReport => {
+            ReportTypes::CpiReport => {
                 self.cpi_pressed = !self.cpi_pressed;
                 // Put keys in if CPI is pressed
                 if self.cpi_pressed {
-                    report.keys = self.settings.cpi_keys;
-                    report.modifier = self.settings.cpi_mods;
+                    Reports::KeyboardCpi(KeyboardReport {
+                        modifier: self.settings.cpi_mods,
+                        keycodes: self.settings.cpi_keys,
+                    })
+                } else {
+                    Reports::KeyboardCpi(KeyboardReport {
+                        modifier: 0,
+                        keycodes: [0; 6],
+                    })
                 }
             }
-            Reports::LiftReport => {
+            ReportTypes::LiftReport => {
+                // If lifted sent keys last time, all we need to do
+                // is update the status to not send anymore lift packets.
+                if self.lifted_status == LiftedStatus::KeysSent {
+                    self.lifted_status = LiftedStatus::Down;
+                }
                 // Put keys in if this is the first lifted report
                 if self.lifted_status == LiftedStatus::SendKeys {
                     self.lifted_status = LiftedStatus::KeysSent;
-                    report.keys = self.settings.lift_keys;
-                    report.modifier = self.settings.lift_mods;
-                }
-                // If lifted sent keys last time, all we need to do
-                // is update the status to not send anymore lift packets.
-                else if self.lifted_status == LiftedStatus::KeysSent {
-                    self.lifted_status = LiftedStatus::Down;
+                    Reports::KeyboardLift(KeyboardReport {
+                        modifier: self.settings.lift_mods,
+                        keycodes: self.settings.lift_keys,
+                    })
+                } else {
+                    Reports::KeyboardLift(KeyboardReport {
+                        modifier: 0,
+                        keycodes: [0; 6],
+                    })
                 }
             }
-            Reports::MouseReport => {
+            ReportTypes::MouseReport => {
                 // Get Buttons
                 let mouse_buttons = [
                     self.lmb.read(),
@@ -211,12 +223,13 @@ impl Mouse {
                 for (i, &button) in mouse_buttons.iter().enumerate() {
                     buttons |= (button as u8) << i;
                 }
-                report.buttons = buttons;
                 // Get Mouse Movement if IRQ is set
+                let mut x = 0;
+                let mut y = 0;
                 if self.sensor_irq.read() {
                     if let Ok(motion) = self.sensor.read_motion_regs() {
-                        report.x = motion.delta_x();
-                        report.y = motion.delta_y();
+                        x = motion.delta_x();
+                        y = motion.delta_y();
                         if motion.motion().lifted() {
                             self.lifted_status = LiftedStatus::Lifted;
                         } else {
@@ -225,12 +238,17 @@ impl Mouse {
                     }
                 }
                 // Get wheel movement
-                report.wheel = self.scroll;
+                let wheel = self.scroll;
                 self.scroll = 0;
+                // Return report
+                Reports::Mouse(MouseReport {
+                    buttons,
+                    x,
+                    y,
+                    wheel,
+                })
             }
-        };
-        // Return data to write
-        report.get_report(report_type, buf)
+        }
     }
 
     pub fn interpret_mouse_report(&mut self, [command, args @ ..]: &[u8; 5]) {
@@ -277,7 +295,7 @@ impl Mouse {
         }
     }
 
-    fn get_report_type(&self) -> Reports {
+    fn get_report_type(&self) -> ReportTypes {
         // Priorities:
         // 1. Respond to any sensor image requests
         // 2. Response to any commands with self.response
@@ -285,17 +303,17 @@ impl Mouse {
         // 4. Send other keyboard report, lift
         // 5. Send normal mouse reports
         if let Some(Response::ImageData(_, _)) = self.response {
-            Reports::SensorImage
+            ReportTypes::SensorImage
         } else if let Some(_) = self.response {
-            Reports::CommandResponse
+            ReportTypes::CommandResponse
         } else if self.cpi.read() != self.cpi_pressed {
-            Reports::CpiReport
+            ReportTypes::CpiReport
         } else if self.lifted_status == LiftedStatus::SendKeys
             || self.lifted_status == LiftedStatus::KeysSent
         {
-            Reports::LiftReport
+            ReportTypes::LiftReport
         } else {
-            Reports::MouseReport
+            ReportTypes::MouseReport
         }
     }
 

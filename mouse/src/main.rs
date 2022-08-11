@@ -79,17 +79,15 @@ fn main() -> ! {
 }
 
 pub fn half_ms_loop() -> bool {
-    static mut BUF: [u8; 64] = [0; 64];
-
     if can_push_hid() {
         // SAFTTEY: BUF Only get's mutably borrowed once
-        let report = interruptm::free(|cs| unsafe {
+        let report = interruptm::free(|cs| {
             MOUSE
                 .borrow(cs)
                 .borrow_mut()
                 .as_mut()
                 .unwrap()
-                .get_mouse_report(&mut BUF)
+                .get_mouse_report()
         });
         // We can unwrap the error, since we know we can push
         usb::push_hid(report).unwrap();
