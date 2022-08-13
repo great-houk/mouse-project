@@ -141,7 +141,7 @@ impl Mouse {
         Ok(())
     }
 
-    pub fn get_mouse_report<'a>(&mut self, buf: &'a mut [u8]) -> &'a [u8] {
+    pub fn get_mouse_hid<'a>(&mut self, buf: &'a mut [u8]) -> &'a [u8] {
         let mut report = MouseReport {
             buttons: 0,
             x: 0,
@@ -149,34 +149,11 @@ impl Mouse {
             wheel: 0,
             keys: [0; 6],
             modifier: 0,
-            command: 0,
-            args: [0; 4],
-            response: 0,
-            data: [0; 4],
-            large_data_ind: 0,
-            large_data: [0; 62],
         };
-        // Check if there is some command we still need to process
-        self.process_pending_commands();
         // Get which report to send
         let report_type = self.get_report_type();
         // Set fields in report based on type
         match report_type {
-            Reports::SensorImage => {
-                // Send response
-                // Panic is ok, since the report type tells us there is a report to send
-                if let Some(Response::ImageData(ind, data)) = self.response.take() {
-                    report.large_data_ind = ind;
-                    report.large_data[..data.len()].copy_from_slice(data);
-                } else {
-                    unreachable!("This should never happen...");
-                }
-            }
-            Reports::CommandResponse => {
-                // Send response
-                // Unwrap is ok, since the report type tells us there is a report to send
-                (report.response, report.data) = self.response.take().unwrap().get_response();
-            }
             Reports::CpiReport => {
                 self.cpi_pressed = !self.cpi_pressed;
                 // Put keys in if CPI is pressed
@@ -230,7 +207,17 @@ impl Mouse {
             }
         };
         // Return data to write
-        report.get_report(report_type, buf)
+        report.get_hid(report_type, buf)
+    }
+
+    /// SAFTEY: Can only be called if the static array returned previously has no references.
+    /// This is because internally a static buffer is used to hand out data, and any data previously handed
+    /// out will be overwritten on the next call. This is UB if the previous call's array still has references.
+    pub unsafe fn get_report(&mut self) -> Option<&'static [u8]> {
+        // Check if there is some command we still need to process
+        self.process_pending_commands();
+        // Send response
+        self.response.map(|response| response.get_response())
     }
 
     pub fn interpret_mouse_report(&mut self, [command, args @ ..]: &[u8; 5]) {
@@ -279,16 +266,10 @@ impl Mouse {
 
     fn get_report_type(&self) -> Reports {
         // Priorities:
-        // 1. Respond to any sensor image requests
-        // 2. Response to any commands with self.response
-        // 3. Send keyboard reports, lets say CPI first
-        // 4. Send other keyboard report, lift
-        // 5. Send normal mouse reports
-        if let Some(Response::ImageData(_, _)) = self.response {
-            Reports::SensorImage
-        } else if let Some(_) = self.response {
-            Reports::CommandResponse
-        } else if self.cpi.read() != self.cpi_pressed {
+        // 1. Send keyboard reports, lets say CPI first
+        // 2. Send other keyboard report, lift
+        // 3. Send normal mouse reports
+        if self.cpi.read() != self.cpi_pressed {
             Reports::CpiReport
         } else if self.lifted_status == LiftedStatus::SendKeys
             || self.lifted_status == LiftedStatus::KeysSent
@@ -353,7 +334,7 @@ impl Mouse {
                 Command::GetSensorReg(reg) => match self.sensor.read(*reg) {
                     Ok(value) => {
                         let [val1, val2] = value.to_le_bytes();
-                        Response::Data([val1, val2, 0], DataType::U16)
+                        Response::Data(DataType::U16, [val1, val2, 0])
                     }
                     Err(_) => Response::Err(CommandError::SensorErr),
                 },
@@ -437,35 +418,11 @@ impl Mouse {
                             }
                             // Sensor image sender
                             Command::StreamSensorImages(frames) => {
-                                if frames != 1 {
-                                    // Get indices
-                                    let mut ind = ind * 62;
-                                    let len = IMAGE.borrow().len();
-                                    // Check bounds, and reset if we're out
-                                    if ind >= len {
-                                        // Reset inds
-                                        ind = 0;
-                                        *ind_mut = 0;
-                                        // Progress frames, as long as we aren't infinite
-                                        if frames > 0 {
-                                            [args[0], args[1]] = (frames - 1).to_le_bytes();
-                                        }
-                                    }
-                                    // Make sure we don't need a new image
-                                    if ind == 0 {
-                                        // Get new image
-                                        if let Err(_) =
-                                            self.sensor.get_frame(unsafe { IMAGE.borrow_mut() })
-                                        {
-                                            return Some(Response::Err(CommandError::SensorErr));
-                                        }
-                                    }
-                                    // Return data
-                                    let too = usize::min(ind + 62, len);
-                                    Response::ImageData((*ind_mut) as u8, &IMAGE.borrow()[ind..too])
-                                } else {
-                                    Response::Ok
+                                // If frames equals 0, then we repeat infinitely
+                                if frames != 0 {
+                                    [args[0], args[1]] = (frames + 1).to_le_bytes();
                                 }
+                                Response::ImageData(&IMAGE.borrow()[..])
                             }
                             // Anything else is an error
                             _ => Response::Err(CommandError::InvalidCommand),

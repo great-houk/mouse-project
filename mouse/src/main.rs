@@ -2,7 +2,7 @@
 #![no_main]
 use crate::mouse::MOUSE;
 use crate::sensor_driver::Pmw3389Driver;
-use crate::usb::{can_pull_hid, can_push_hid, setup_usb};
+use crate::usb::{can_pull_report, can_push_hid, can_push_report, setup_usb};
 use cortex_m::asm;
 use cortex_m::interrupt::{self as interruptm};
 use cortex_m_rt::entry;
@@ -89,19 +89,19 @@ pub fn half_ms_loop() -> bool {
                 .borrow_mut()
                 .as_mut()
                 .unwrap()
-                .get_mouse_report(&mut BUF)
+                .get_mouse_hid(&mut BUF)
         });
         // We can unwrap the error, since we know we can push
         usb::push_hid(report).unwrap();
     }
-    if can_pull_hid() {
+    if can_pull_report() {
         interruptm::free(|cs| {
             let mut buf = [0; 5];
             // We can unwrap the error, since we know we can pull
-            let report = usb::pull_hid(cs).unwrap();
+            let report = usb::pull_report(cs).unwrap();
             // Index 0 has 0x03, the report ID,
             // which we don't care about
-            buf.copy_from_slice(&report[1..]);
+            buf.copy_from_slice(&report[1..6]);
 
             MOUSE
                 .borrow(cs)
@@ -110,6 +110,14 @@ pub fn half_ms_loop() -> bool {
                 .unwrap()
                 .interpret_mouse_report(&buf);
         });
+    }
+    if can_push_report() {
+        let report = interruptm::free(|cs| unsafe {
+            MOUSE.borrow(cs).borrow_mut().as_mut().unwrap().get_report()
+        });
+        if let Some(report) = report {
+            usb::push_report(report).unwrap();
+        }
     }
     // Continue loop
     true

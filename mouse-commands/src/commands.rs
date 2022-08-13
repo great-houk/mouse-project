@@ -1,5 +1,3 @@
-use core::panic;
-
 use pmw3389_driver::Pmw3389Register;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -27,10 +25,10 @@ impl CommandError {
         }
     }
 
-    pub fn to_bytes(self) -> [u8; 4] {
+    pub fn to_bytes(&self) -> [u8; 4] {
         match self {
             // Everything so far uses this pattern
-            _ => [self as u8, 0, 0, 0],
+            _ => [*self as u8, 0, 0, 0],
         }
     }
 }
@@ -149,29 +147,71 @@ impl Command {
 pub enum Response {
     Err(CommandError),
     Ok,
-    String([u8; 4] /* 4 Unicode Chars */),
+    String([u8; 4] /* Unicode Chars */),
     ScrollState(u8 /* State */),
     DataArray(u16 /* Length */, DataType),
+    Data(DataType, [u8; 3]),
+    // Things not meant to be matched
+    // Raw Data
     RawData([u8; 5]),
-    Data([u8; 3], DataType),
     // Image endpoint
-    ImageData(u8 /* Ind */, &'static [u8]),
+    ImageData(&'static [u8]),
 }
 
 impl Response {
-    pub fn get_response(self) -> (u8, [u8; 4]) {
+    pub fn get_response(&self) -> &'static [u8] {
+        static mut BUF: [u8; 5] = [0; 5];
         match self {
-            Response::RawData([first, rest @ ..]) => (first, rest),
-            Response::Err(err) => (0, err.to_bytes()),
-            Response::String(chars) => (1, chars),
-            Response::ScrollState(state) => (2, [state, 0, 0, 0]),
-            Response::Ok => (3, [0, 0, 0, 0]),
+            Response::RawData(data) => unsafe {
+                BUF[..data.len()].clone_from_slice(data);
+                &BUF
+            },
+            Response::Err(err) => {
+                let [err0, err1, err2, err3] = err.to_bytes();
+                let ret = [0, err0, err1, err2, err3];
+                unsafe {
+                    BUF[..ret.len()].clone_from_slice(&ret);
+                    &BUF
+                }
+            }
+            Response::String(chars) => {
+                let [ch0, ch1, ch2, ch3] = *chars;
+                let ret = [1, ch0, ch1, ch2, ch3];
+                unsafe {
+                    BUF[..ret.len()].clone_from_slice(&ret);
+                    &BUF
+                }
+            }
+            Response::ScrollState(state) => {
+                let ret = [2, *state, 0, 0, 0];
+                unsafe {
+                    BUF[..ret.len()].clone_from_slice(&ret);
+                    &BUF
+                }
+            }
+            Response::Ok => {
+                let ret = [3, 0, 0, 0, 0];
+                unsafe {
+                    BUF[..ret.len()].clone_from_slice(&ret);
+                    &BUF
+                }
+            }
             Response::DataArray(len, data) => {
                 let [len0, len1] = len.to_le_bytes();
-                (4, [len0, len1, data as u8, 0])
+                let ret = [4, len0, len1, *data as u8, 0];
+                unsafe {
+                    BUF[..ret.len()].clone_from_slice(&ret);
+                    &BUF
+                }
             }
-            Response::Data(data, ty) => (5, [data[0], data[1], data[2], ty as u8]),
-            Response::ImageData(_, _) => panic!("Can't compress image data"),
+            Response::Data(ty, data) => {
+                let ret = [5, *ty as u8, data[0], data[1], data[2]];
+                unsafe {
+                    BUF[..ret.len()].clone_from_slice(&ret);
+                    &BUF
+                }
+            }
+            Response::ImageData(data) => data,
         }
     }
 
@@ -194,7 +234,7 @@ impl Response {
                 DataType::from(data)?,
             )),
             // Data
-            (5, [data @ .., ty]) => Ok(Response::Data(data, DataType::from(ty)?)),
+            (5, [ty, data @ ..]) => Ok(Response::Data(DataType::from(ty)?, data)),
             // Nothing/Raw Data
             _ => Err(CommandError::InvalidResponse),
         }

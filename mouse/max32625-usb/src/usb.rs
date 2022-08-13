@@ -295,7 +295,7 @@ impl Usb {
             return Err(UsbError::BufferOverflow);
         }
         // Copy to buffer
-        let buffer_ind = if index == 0 { 0 } else { index + 2 };
+        let buffer_ind = if index == 0 { 0 } else { index + 1 };
         buf[..len].copy_from_slice(&self.buffers[buffer_ind][..len]);
         // Tell the USB to continue reading
         // Set descriptors to max possible length

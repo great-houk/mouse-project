@@ -5,8 +5,6 @@ pub enum Reports {
     MouseReport = 0x01,
     CpiReport = 0x02,
     LiftReport = 0x03,
-    CommandResponse = 0x04,
-    SensorImage = 0x05,
 }
 
 #[gen_hid_descriptor(
@@ -50,32 +48,6 @@ pub enum Reports {
             };
         };
     },
-    (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x01) = {
-        (report_id = 0x04,) = {
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
-                #[item_settings data,variable] command=feature;
-            };
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
-                #[item_settings data,array] args=feature;
-            };
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
-                #[item_settings data,variable] response=input;
-            };
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
-                #[item_settings data,array] data=input;
-            };
-        };
-    },
-    (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x02) = {
-        (report_id = 0x05,) = {
-            (usage = 0x02, usage_min = 0x00, usage_max = 0xFF) = {
-                #[item_settings data,variable] large_data_ind=input;
-            };
-            (usage = 0x02, usage_min = 0x00, usage_max = 0xFF) = {
-                #[item_settings data,array] large_data=input;
-            };
-        };
-    }
 )]
 #[allow(dead_code)]
 pub struct MouseReport {
@@ -86,18 +58,10 @@ pub struct MouseReport {
     //
     pub modifier: u8,
     pub keys: [u8; 6],
-    //
-    pub command: u8,
-    pub args: [u8; 4],
-    pub response: u8,
-    pub data: [u8; 4],
-    // Sensor Data
-    pub large_data_ind: u8,
-    pub large_data: [u8; 62],
 }
 
 impl MouseReport {
-    pub fn get_report<'a>(&self, report: Reports, buf: &'a mut [u8]) -> &'a [u8] {
+    pub fn get_hid<'a>(&self, report: Reports, buf: &'a mut [u8]) -> &'a [u8] {
         buf[0] = report as u8;
         let size = match report {
             Reports::MouseReport => {
@@ -113,18 +77,6 @@ impl MouseReport {
                 buf[2..8].copy_from_slice(&self.keys);
                 // Length plus report ID byte
                 7 + 1
-            }
-            Reports::CommandResponse => {
-                buf[1] = self.response;
-                buf[2..6].copy_from_slice(&self.data);
-                // Length plus report ID byte
-                5 + 1
-            }
-            Reports::SensorImage => {
-                buf[1] = self.large_data_ind;
-                buf[2..64].copy_from_slice(&self.large_data);
-                // Length plus report ID byte
-                63 + 1
             }
         };
         &buf[..size]

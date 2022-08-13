@@ -22,6 +22,7 @@ static USB_BUS: Mutex<RefCell<Option<UsbDevice<UsbBus>>>> = Mutex::new(RefCell::
 static USB_HID: Mutex<RefCell<Option<HIDClass<UsbBus>>>> = Mutex::new(RefCell::new(None));
 static USB_SERIAL: Mutex<RefCell<Option<SerialPort<UsbBus>>>> = Mutex::new(RefCell::new(None));
 static HID_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
+static IN_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
 static OUT_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
 static IS_READY: AtomicBool = AtomicBool::new(false);
 pub static mut POLLING_RATE: u8 = 1; // Number of ms per poll
@@ -51,6 +52,7 @@ pub fn setup_usb(
             UsbDeviceBuilder::new(bus_allocator, UsbVidPid(VID, PID))
                 .manufacturer("Me")
                 .product("Awesome Mouse 😎")
+                .composite_with_iads()
                 .serial_number("PROTO V1")
                 .max_power(500)
                 .build(),
@@ -126,16 +128,31 @@ pub fn push_hid(report: &'static [u8]) -> Result<(), UsbError> {
     })
 }
 
-pub fn can_pull_hid() -> bool {
+pub fn can_pull_report() -> bool {
     interruptm::free(|cs| OUT_REPORT.borrow(cs).borrow().is_some())
 }
 
-pub fn pull_hid<'a>(cs: &'a CriticalSection) -> Result<&'a [u8], UsbError> {
+pub fn pull_report<'a>(cs: &'a CriticalSection) -> Result<&'a [u8], UsbError> {
     if let Some(report) = OUT_REPORT.borrow(cs).borrow_mut().take() {
         Ok(report)
     } else {
         Err(UsbError::WouldBlock)
     }
+}
+
+pub fn can_push_report() -> bool {
+    interruptm::free(|cs| IN_REPORT.borrow(cs).borrow().is_none())
+}
+
+pub fn push_report(report: &'static [u8]) -> Result<(), UsbError> {
+    interruptm::free(|cs| {
+        if IN_REPORT.borrow(cs).borrow().is_some() {
+            Err(UsbError::WouldBlock)
+        } else {
+            *IN_REPORT.borrow(cs).borrow_mut() = Some(report);
+            Ok(())
+        }
+    })
 }
 
 #[interrupt]
@@ -153,25 +170,27 @@ fn USB() {
             );
             // Poll device
             usb_dev.poll(&mut [serial, hid]);
-            // Push HID report
-            if let Some(report) = HID_REPORT.borrow(cs).borrow_mut().take() {
-                let _ = hid.push_raw_input(&report);
-            }
-            // Pull HID Report
+            // Pull HID Report from serial buffer
             static mut BUF: [u8; 128] = [0; 128];
             if OUT_REPORT.borrow(cs).borrow().is_none() {
-                if let Ok(info) = hid.pull_raw_report(unsafe { &mut BUF }) {
-                    *OUT_REPORT.borrow(cs).borrow_mut() = Some(unsafe { &BUF[..info.len] })
+                if let Ok(len) = serial.read(unsafe { &mut BUF }) {
+                    *OUT_REPORT.borrow(cs).borrow_mut() = Some(unsafe { &BUF[..len] })
                 };
             }
-            // Write to serial what we read
-            let mut buf = [0; 5];
-            match serial.read(&mut buf) {
-                Ok(count) => {
-                    let _ = serial.write(&buf[..count]);
+            // Write Response to Serial Buffer
+            if let Some(buf) = &mut *IN_REPORT.borrow(cs).borrow_mut() {
+                match serial.write(&buf) {
+                    Ok(count) => *buf = &buf[count..],
+                    Err(UsbError::WouldBlock) => {}
+                    Err(_) => { /* There isn't really any proper recourse for an error here */ }
                 }
-                Err(_) => {}
-            };
+            }
+            match &*IN_REPORT.borrow(cs).borrow() {
+                Some(buf) if buf.len() == 0 => {
+                    *IN_REPORT.borrow(cs).borrow_mut() = None;
+                }
+                _ => {}
+            }
         }
     });
 }
