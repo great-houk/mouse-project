@@ -15,10 +15,12 @@ use usb_device::{
     UsbError,
 };
 use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
+use usbd_serial::SerialPort;
 
 static USB_ALLOCATOR: StaticBorrow<UsbBusAllocator<UsbBus>> = StaticBorrow::new();
 static USB_BUS: Mutex<RefCell<Option<UsbDevice<UsbBus>>>> = Mutex::new(RefCell::new(None));
 static USB_HID: Mutex<RefCell<Option<HIDClass<UsbBus>>>> = Mutex::new(RefCell::new(None));
+static USB_SERIAL: Mutex<RefCell<Option<SerialPort<UsbBus>>>> = Mutex::new(RefCell::new(None));
 static HID_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
 static OUT_REPORT: Mutex<RefCell<Option<&'static [u8]>>> = Mutex::new(RefCell::new(None));
 static IS_READY: AtomicBool = AtomicBool::new(false);
@@ -38,6 +40,8 @@ pub fn setup_usb(
         USB_ALLOCATOR.set(UsbBus::new(usb, pwrman, clkman, pwrseq, adc));
         let bus_allocator = USB_ALLOCATOR.borrow();
 
+        *USB_SERIAL.borrow(cs).borrow_mut() = Some(SerialPort::new(bus_allocator));
+
         *USB_HID.borrow(cs).borrow_mut() =
             Some(HIDClass::new(bus_allocator, MouseReport::desc(), unsafe {
                 POLLING_RATE
@@ -45,7 +49,7 @@ pub fn setup_usb(
 
         *USB_BUS.borrow(cs).borrow_mut() = Some(
             UsbDeviceBuilder::new(bus_allocator, UsbVidPid(VID, PID))
-                .manufacturer("lmaoooo")
+                .manufacturer("Me")
                 .product("Awesome Mouse 😎")
                 .serial_number("PROTO V1")
                 .max_power(500)
@@ -83,6 +87,7 @@ pub fn reset_usb() {
         *USB_BUS.borrow(cs).borrow_mut() = None;
 
         *USB_HID.borrow(cs).borrow_mut() = None;
+        *USB_SERIAL.borrow(cs).borrow_mut() = None;
         // SAFTEY: No interrupts are allowed, so nothing can access the static mut
         unsafe { USB_ALLOCATOR.reset() };
     });
@@ -136,9 +141,10 @@ pub fn pull_hid<'a>(cs: &'a CriticalSection) -> Result<&'a [u8], UsbError> {
 #[interrupt]
 fn USB() {
     interruptm::free(|cs| {
-        if let (Some(usb_dev), Some(hid)) = (
+        if let (Some(usb_dev), Some(hid), Some(serial)) = (
             &mut *USB_BUS.borrow(cs).borrow_mut(),
             &mut *USB_HID.borrow(cs).borrow_mut(),
+            &mut *USB_SERIAL.borrow(cs).borrow_mut(),
         ) {
             // Update setup status
             IS_READY.store(
@@ -146,7 +152,7 @@ fn USB() {
                 Ordering::Relaxed,
             );
             // Poll device
-            usb_dev.poll(&mut [hid]);
+            usb_dev.poll(&mut [serial, hid]);
             // Push HID report
             if let Some(report) = HID_REPORT.borrow(cs).borrow_mut().take() {
                 let _ = hid.push_raw_input(&report);
@@ -158,6 +164,14 @@ fn USB() {
                     *OUT_REPORT.borrow(cs).borrow_mut() = Some(unsafe { &BUF[..info.len] })
                 };
             }
+            // Write to serial what we read
+            let mut buf = [0; 5];
+            match serial.read(&mut buf) {
+                Ok(count) => {
+                    let _ = serial.write(&buf[..count]);
+                }
+                Err(_) => {}
+            };
         }
     });
 }
