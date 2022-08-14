@@ -49,22 +49,8 @@ pub enum FunCommand {
     AngleSnap { enabled: Option<bool> },
     /// Saves a video in the specified directory that comes from the mouse sensor.
     #[clap(name = "record")]
-    Record {
-        #[clap(subcommand)]
-        command: RecordCommand,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum RecordCommand {
-    /// Saves the mouse's view to a file in the .y4m format. Use either ffmpeg to convert or ffplay to view.
-    #[clap(name = "save")]
-    Record {
-        path: String,
-        #[clap(min_values = 1)]
-        frames: u16,
-    },
-    /// Opens a window and displays a "live" view of what the mouse is seeing. Press escape on the window to stop.
+    Record { path: String },
+    /// Opens a new windows to display what the mouse sees in real time
     #[clap(name = "view")]
-    Live,
+    View,
 }

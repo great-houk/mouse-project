@@ -14,7 +14,12 @@ use usb_device::{
     device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
     UsbError,
 };
-use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
+use usbd_hid::{
+    descriptor::SerializedDescriptor,
+    hid_class::{
+        HIDClass, HidClassSettings, HidCountryCode, HidProtocol, HidSubClass, ProtocolModeConfig,
+    },
+};
 
 static USB_ALLOCATOR: StaticBorrow<UsbBusAllocator<UsbBus>> = StaticBorrow::new();
 static USB_BUS: Mutex<RefCell<Option<UsbDevice<UsbBus>>>> = Mutex::new(RefCell::new(None));
@@ -38,10 +43,17 @@ pub fn setup_usb(
         USB_ALLOCATOR.set(UsbBus::new(usb, pwrman, clkman, pwrseq, adc));
         let bus_allocator = USB_ALLOCATOR.borrow();
 
-        *USB_HID.borrow(cs).borrow_mut() =
-            Some(HIDClass::new(bus_allocator, MouseReport::desc(), unsafe {
-                POLLING_RATE
-            }));
+        *USB_HID.borrow(cs).borrow_mut() = Some(HIDClass::new_ep_in_with_settings(
+            bus_allocator,
+            MouseReport::desc(),
+            unsafe { POLLING_RATE },
+            HidClassSettings {
+                subclass: HidSubClass::NoSubClass,
+                protocol: HidProtocol::Generic,
+                config: ProtocolModeConfig::DefaultBehavior,
+                locale: HidCountryCode::US,
+            },
+        ));
 
         *USB_BUS.borrow(cs).borrow_mut() = Some(
             UsbDeviceBuilder::new(bus_allocator, UsbVidPid(VID, PID))
