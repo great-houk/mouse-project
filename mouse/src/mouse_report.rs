@@ -52,26 +52,26 @@ pub enum Reports {
     },
     (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x01) = {
         (report_id = 0x04,) = {
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,variable] command=feature;
             };
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,array] args=feature;
             };
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,variable] response=input;
             };
-            (usage = 0x01, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,array] data=input;
             };
         };
     },
     (collection = APPLICATION, usage_page = VENDOR_DEFINED_START, usage = 0x02) = {
         (report_id = 0x05,) = {
-            (usage = 0x02, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,variable] large_data_ind=input;
             };
-            (usage = 0x02, usage_min = 0x00, usage_max = 0xFF) = {
+            (usage_min = 0x00, usage_max = 0xFF) = {
                 #[item_settings data,array] large_data=input;
             };
         };
