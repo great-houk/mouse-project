@@ -1,61 +1,31 @@
-use core::panic;
-
-use hidapi::HidDevice;
 use mouse_commands::{Command, CommandError, DataType, Response};
 use pmw3389_driver::Pmw3389Register;
-
-const COMMAND_REPORT_ID: u8 = 0x04;
-const COMMAND_USAGE: u16 = 0x01;
-const _SENSOR_IMAGE_ID: u8 = 0x05;
-const IMAGE_USAGE: u16 = 0x02;
+use serialport::{Error, SerialPort};
+use std::io::ErrorKind;
+use std::time::Duration;
 
 pub struct Mouse {
-    device: HidDevice,
-    image: HidDevice,
+    port: Box<dyn SerialPort>,
 }
 
 impl Mouse {
-    pub fn connect(vid: u16, pid: u16, usage_page: u16) -> Mouse {
-        let api = hidapi::HidApi::new().unwrap();
-        // Find mouse
-        let mut mouse = None;
-        for device in api.device_list() {
-            if device.vendor_id() == vid
-                && device.product_id() == pid
-                && device.usage_page() == usage_page
-                && device.usage() == COMMAND_USAGE
-            {
-                mouse = Some(device);
-                break;
+    pub fn connect(name: String) -> Result<Mouse, Error> {
+        let mut port = None;
+        for _ in 0..100 {
+            match serialport::new(name.clone(), 9600).open() {
+                Ok(raw) => {
+                    port = Some(raw);
+                    break;
+                }
+                Err(_) => {}
             }
+            std::thread::sleep(Duration::from_millis(10));
         }
-        let mouse = mouse.expect("Couldn't Connect to Mouse, maybe VID/PID/usage_page are wrong?");
-        // Find image pipe
-        let mut image = None;
-        for device in api.device_list() {
-            if device.vendor_id() == vid
-                && device.product_id() == pid
-                && device.usage_page() == usage_page
-                && device.usage() == IMAGE_USAGE
-            {
-                image = Some(device);
-                break;
-            }
-        }
-        let image = image.expect("Couldn't Connect to Mouse, maybe VID/PID/usage_page are wrong?");
-
-        // Connect to device using its VID and PID
-        let device = api.open_path(mouse.path()).unwrap();
-        device.set_blocking_mode(true).unwrap();
-
-        // Connect to image path
-        let image = api.open_path(image.path()).unwrap();
-        image.set_blocking_mode(true).unwrap();
-
-        Mouse { device, image }
+        let port = port.unwrap();
+        Ok(Mouse { port })
     }
 
-    pub fn set_dpi(&self, dpi: u32) {
+    pub fn set_dpi(&mut self, dpi: u32) {
         // Send Request
         self.write(Command::SetDPI(dpi));
         // Get Response
@@ -67,7 +37,7 @@ impl Mouse {
         }
     }
 
-    pub fn get_settings(&self) -> MouseSettings {
+    pub fn get_settings(&mut self) -> MouseSettings {
         // Send request
         self.write(Command::GetSettings);
         // Get Response
@@ -93,7 +63,7 @@ impl Mouse {
         MouseSettings::from_bytes(&buf)
     }
 
-    pub fn save_settings(&self) -> Result<(), ()> {
+    pub fn save_settings(&mut self) -> Result<(), ()> {
         // Send request
         self.write(Command::SaveSettings);
         // Get response
@@ -103,7 +73,7 @@ impl Mouse {
         }
     }
 
-    pub fn lorem_ipsum(&self) -> String {
+    pub fn lorem_ipsum(&mut self) -> String {
         // Request Lorem Ipsum
         self.write(Command::LoremIpsum);
         // Read Incoming Data Array
@@ -137,7 +107,7 @@ impl Mouse {
         }
     }
 
-    pub fn set_cpi_keys(&self, mods: u8, keys: [u8; 6]) -> Result<(), ()> {
+    pub fn set_cpi_keys(&mut self, mods: u8, keys: [u8; 6]) -> Result<(), ()> {
         // Send command 1
         self.write(Command::Cpi1(mods, [keys[0], keys[1]]));
         // Get response
@@ -154,7 +124,7 @@ impl Mouse {
         }
     }
 
-    pub fn set_lift_keys(&self, mods: u8, keys: [u8; 6]) -> Result<(), ()> {
+    pub fn set_lift_keys(&mut self, mods: u8, keys: [u8; 6]) -> Result<(), ()> {
         // Send command 1
         self.write(Command::Lift1(mods, [keys[0], keys[1]]));
         // Get response
@@ -171,7 +141,7 @@ impl Mouse {
         }
     }
 
-    pub fn say_hi(&self) -> Result<String, ()> {
+    pub fn say_hi(&mut self) -> Result<String, ()> {
         // Send command
         self.write(Command::SayHi);
         // Read hi
@@ -182,10 +152,10 @@ impl Mouse {
         }
     }
 
-    pub fn get_angle_snap(&self) -> Result<bool, ()> {
+    pub fn get_angle_snap(&mut self) -> Result<bool, ()> {
         // Send command
         self.write(Command::GetSensorReg(Pmw3389Register::AngleSnap));
-        if let Ok(Response::Data(data, DataType::U16)) = self.read() {
+        if let Ok(Response::Data(DataType::U16, data)) = self.read() {
             let value = data[0] != 0;
             Ok(value)
         } else {
@@ -193,7 +163,7 @@ impl Mouse {
         }
     }
 
-    pub fn set_angle_snap(&self, enabled: bool) -> Result<(), ()> {
+    pub fn set_angle_snap(&mut self, enabled: bool) -> Result<(), ()> {
         // Send command
         let val;
         if enabled {
@@ -209,14 +179,14 @@ impl Mouse {
         }
     }
 
-    pub fn set_polling_rate(&self, rate: u8) {
+    pub fn set_polling_rate(&mut self, rate: u8) {
         // Send command
         self.write(Command::SetPollingRate(rate))
         // We should technically recieve an ok here, but since it disconnects first,
         // there's no other choice besides assuming it worked.
     }
 
-    pub fn start_frame_read(&self, frames: u16) -> Result<(), ()> {
+    pub fn start_frame_read(&mut self, frames: u16) -> Result<(), ()> {
         // Send command
         self.write(Command::StreamSensorImages(frames));
 
@@ -228,12 +198,13 @@ impl Mouse {
     }
 
     pub fn read_frame(&mut self) -> Result<Vec<u8>, ()> {
+        todo!();
         let mut buf = [0; 64];
         let mut ind = None;
         let mut ret = Vec::with_capacity(21);
 
         while ind == None || ind < Some(20) {
-            self.image.read(&mut buf[..]).unwrap();
+            // self.image.read(&mut buf[..]).unwrap();
             // println!("{buf:?}");
             ind = Some(buf[1] as usize);
             while ret.len() < ind.unwrap() * 62 {
@@ -245,7 +216,7 @@ impl Mouse {
         Ok(ret)
     }
 
-    pub fn end_frame_read(&self) -> Result<(), ()> {
+    pub fn end_frame_read(&mut self) -> Result<(), ()> {
         // Send command
         self.write(Command::ResetSensor);
 
@@ -260,24 +231,26 @@ impl Mouse {
 mod hardware {
     use super::*;
     impl Mouse {
-        pub fn write(&self, command: Command) {
+        pub fn write(&mut self, command: Command) {
             // Write data to device
-            let mut buf = [COMMAND_REPORT_ID; 6];
+            let mut buf = [0; 5];
             let (command, args) = command.get_command();
-            buf[1] = command;
-            buf[2..].copy_from_slice(&args);
-            self.device.send_feature_report(&buf).unwrap();
+            buf[0] = command;
+            buf[1..].copy_from_slice(&args);
+            while let Err(ErrorKind::TimedOut) = self.port.write(&buf).map_err(|err| err.kind()) {}
         }
 
-        pub fn read(&self) -> Result<Response, CommandError> {
-            let [response, data @ ..] = self.read_raw();
-            Response::match_response(response, data)
+        pub fn read(&mut self) -> Result<Response, CommandError> {
+            let raw = self.read_raw();
+            Response::match_response(raw[0], [raw[1], raw[2], raw[3], raw[3]])
         }
 
-        pub fn read_raw(&self) -> [u8; 5] {
-            let mut buf = [0; 6];
-            self.device.read(&mut buf[..]).unwrap();
-            let [_, buf @ ..] = buf;
+        pub fn read_raw(&mut self) -> Vec<u8> {
+            let mut buf = Vec::with_capacity(5);
+            while self.port.bytes_to_read().unwrap() == 0 {
+                print!(".")
+            }
+            while let Err(ErrorKind::TimedOut) = self.port.read(&mut buf).map_err(|e| e.kind()) {}
             buf
         }
     }

@@ -418,11 +418,23 @@ impl Mouse {
                             }
                             // Sensor image sender
                             Command::StreamSensorImages(frames) => {
-                                // If frames equals 0, then we repeat infinitely
-                                if frames != 0 {
-                                    [args[0], args[1]] = (frames + 1).to_le_bytes();
+                                // If frames equals 1, then we quit the loop
+                                if frames != 1 {
+                                    // If frames equals 0, then we repeat infinitely
+                                    if frames != 0 {
+                                        [args[0], args[1]] = (frames - 1).to_le_bytes();
+                                    }
+                                    // Get new image
+                                    if let Err(_) =
+                                        self.sensor.get_frame(unsafe { IMAGE.borrow_mut() })
+                                    {
+                                        return Some(Response::Err(CommandError::SensorErr));
+                                    }
+                                    // Send image
+                                    Response::ImageData(&IMAGE.borrow()[..])
+                                } else {
+                                    Response::Ok
                                 }
-                                Response::ImageData(&IMAGE.borrow()[..])
                             }
                             // Anything else is an error
                             _ => Response::Err(CommandError::InvalidCommand),

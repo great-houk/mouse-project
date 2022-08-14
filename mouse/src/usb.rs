@@ -170,7 +170,11 @@ fn USB() {
             );
             // Poll device
             usb_dev.poll(&mut [serial, hid]);
-            // Pull HID Report from serial buffer
+            // Push HID report
+            if let Some(report) = HID_REPORT.borrow(cs).borrow_mut().take() {
+                let _ = hid.push_raw_input(&report);
+            }
+            // Pull Report from serial buffer
             static mut BUF: [u8; 128] = [0; 128];
             if OUT_REPORT.borrow(cs).borrow().is_none() {
                 if let Ok(len) = serial.read(unsafe { &mut BUF }) {
@@ -178,18 +182,20 @@ fn USB() {
                 };
             }
             // Write Response to Serial Buffer
+            let mut should_set_none = false;
             if let Some(buf) = &mut *IN_REPORT.borrow(cs).borrow_mut() {
                 match serial.write(&buf) {
                     Ok(count) => *buf = &buf[count..],
                     Err(UsbError::WouldBlock) => {}
                     Err(_) => { /* There isn't really any proper recourse for an error here */ }
                 }
+                let _ = serial.flush();
+                // Reset buffer if buf len is 0
+                should_set_none = buf.len() == 0;
             }
-            match &*IN_REPORT.borrow(cs).borrow() {
-                Some(buf) if buf.len() == 0 => {
-                    *IN_REPORT.borrow(cs).borrow_mut() = None;
-                }
-                _ => {}
+            // Set IN_REPORT to none if it has an empty buffer
+            if should_set_none {
+                *IN_REPORT.borrow(cs).borrow_mut() = None;
             }
         }
     });

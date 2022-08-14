@@ -21,43 +21,43 @@ mod mouse;
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {
-    #[clap(long, short, default_value_t = 0x16C0, value_parser)]
-    vid: u16,
-    #[clap(long, short, default_value_t = 0x27DD, value_parser)]
-    pid: u16,
-    #[clap(long, short, default_value_t = 0xFF00, value_parser)]
-    usage_page: u16,
+    #[clap(value_parser)]
+    name: String,
     #[clap(subcommand)]
     command: Commands,
 }
 
 fn main() {
     // Get CLI input
-    let cli = Cli::parse();
+    // let cli = Cli::parse();
+    let cli = Cli {
+        name: "COM9".to_string(),
+        command: Commands::Battery,
+    };
     // Connect to mouse
-    let mut mouse = Mouse::connect(cli.vid, cli.pid, cli.usage_page);
+    let mut mouse = Mouse::connect(cli.name).unwrap();
     // Match command
     match cli.command {
         Commands::SetDpi { dpi } => match dpi {
-            Some(dpi) => set_dpi(&mouse, dpi),
-            None => read_dpi(&mouse),
+            Some(dpi) => set_dpi(&mut mouse, dpi),
+            None => read_dpi(&mut mouse),
         },
         Commands::CpiButtonFunc { keys } => match keys {
-            Some(keys) => set_cpi_keys(&mouse, keys),
-            None => get_cpi_keys(&mouse),
+            Some(keys) => set_cpi_keys(&mut mouse, keys),
+            None => get_cpi_keys(&mut mouse),
         },
         Commands::LiftButtonFunc { keys } => match keys {
-            Some(keys) => set_lift_keys(&mouse, keys),
-            None => get_lift_keys(&mouse),
+            Some(keys) => set_lift_keys(&mut mouse, keys),
+            None => get_lift_keys(&mut mouse),
         },
-        Commands::LoremIpsum => lorem_ipsum(&mouse),
-        Commands::Save => save_settings(&mouse),
-        Commands::Battery => get_battery_voltage(&mouse),
-        Commands::SayHi => say_hi(&mouse),
+        Commands::LoremIpsum => lorem_ipsum(&mut mouse),
+        Commands::Save => save_settings(&mut mouse),
+        Commands::Battery => get_battery_voltage(&mut mouse),
+        Commands::SayHi => say_hi(&mut mouse),
         Commands::Fun { command } => match command {
             FunCommand::AngleSnap { enabled } => match enabled {
-                Some(enabled) => set_angle_snap(enabled, &mouse),
-                None => get_angle_snap(&mouse),
+                Some(enabled) => set_angle_snap(enabled, &mut mouse),
+                None => get_angle_snap(&mut mouse),
             },
             FunCommand::Record { command } => match command {
                 RecordCommand::Record { path, frames } => {
@@ -66,7 +66,7 @@ fn main() {
                 RecordCommand::Live => display_mouse_frames(mouse),
             },
         },
-        Commands::PollingRate { rate } => set_mouse_polling_rate(rate, &mouse),
+        Commands::PollingRate { rate } => set_mouse_polling_rate(rate, &mut mouse),
     };
 }
 
@@ -174,13 +174,13 @@ fn record_mouse_frames(path: String, iters: u16, mouse: &mut Mouse) {
     println!("Done! Read {iters} frames into ./{path} at {fps}fps");
 }
 
-fn set_mouse_polling_rate(rate: u8, mouse: &Mouse) {
+fn set_mouse_polling_rate(rate: u8, mouse: &mut Mouse) {
     println!("Warning, this function is still really broken, and can only really be used once before you have to reset the mouse (at least on my windows pc).");
     mouse.set_polling_rate(rate);
     println!("Updated polling rate!");
 }
 
-fn get_angle_snap(mouse: &Mouse) {
+fn get_angle_snap(mouse: &mut Mouse) {
     let val = mouse.get_angle_snap();
     if let Ok(val) = val {
         if val {
@@ -193,7 +193,7 @@ fn get_angle_snap(mouse: &Mouse) {
     }
 }
 
-fn set_angle_snap(enabled: bool, mouse: &Mouse) {
+fn set_angle_snap(enabled: bool, mouse: &mut Mouse) {
     if let Ok(()) = mouse.set_angle_snap(enabled) {
         if enabled {
             println!("Angle snap was enabled!");
@@ -205,7 +205,7 @@ fn set_angle_snap(enabled: bool, mouse: &Mouse) {
     }
 }
 
-fn say_hi(mouse: &Mouse) {
+fn say_hi(mouse: &mut Mouse) {
     let hi = mouse.say_hi();
     match hi {
         Ok(hi) => println!("Mouse: {hi}"),
@@ -213,13 +213,13 @@ fn say_hi(mouse: &Mouse) {
     }
 }
 
-fn get_battery_voltage(mouse: &Mouse) {
+fn get_battery_voltage(mouse: &mut Mouse) {
     // Get voltage
     let voltage = mouse.get_settings().bat_volt();
     println!("Battery voltage is at {voltage} volts");
 }
 
-fn get_lift_keys(mouse: &Mouse) {
+fn get_lift_keys(mouse: &mut Mouse) {
     // Get keys
     let keys = mouse.get_settings().lift_keys();
     let mods = mouse.get_settings().lift_mods();
@@ -227,7 +227,7 @@ fn get_lift_keys(mouse: &Mouse) {
     println!("Currently Lift keys are set to: {string}");
 }
 
-fn get_cpi_keys(mouse: &Mouse) {
+fn get_cpi_keys(mouse: &mut Mouse) {
     // Get keys
     let keys = mouse.get_settings().cpi_keys();
     let mods = mouse.get_settings().cpi_mods();
@@ -235,14 +235,14 @@ fn get_cpi_keys(mouse: &Mouse) {
     println!("Currently Cpi keys are set to: {string}");
 }
 
-fn lorem_ipsum(mouse: &Mouse) {
+fn lorem_ipsum(mouse: &mut Mouse) {
     // Get Lorem Ipsum
     let ipsum = mouse.lorem_ipsum();
     // Print it
     println!("As the fables say it goes:\r\n\r\n\t{ipsum}.\r\n\r\nAnd so it was told, by such a thing as a mouse.");
 }
 
-fn save_settings(mouse: &Mouse) {
+fn save_settings(mouse: &mut Mouse) {
     let result = mouse.save_settings();
     match result {
         Ok(_) => println!("Settings saved!"),
@@ -250,7 +250,7 @@ fn save_settings(mouse: &Mouse) {
     }
 }
 
-fn set_cpi_keys(mouse: &Mouse, keys: String) {
+fn set_cpi_keys(mouse: &mut Mouse, keys: String) {
     let keys = map_string(keys);
     match keys {
         Ok((mods, keys)) => match mouse.set_cpi_keys(mods, keys) {
@@ -264,7 +264,7 @@ fn set_cpi_keys(mouse: &Mouse, keys: String) {
     }
 }
 
-fn set_lift_keys(mouse: &Mouse, keys: String) {
+fn set_lift_keys(mouse: &mut Mouse, keys: String) {
     let keys = map_string(keys);
     match keys {
         Ok((mods, keys)) => match mouse.set_lift_keys(mods, keys) {
@@ -278,12 +278,12 @@ fn set_lift_keys(mouse: &Mouse, keys: String) {
     }
 }
 
-fn read_dpi(mouse: &Mouse) {
+fn read_dpi(mouse: &mut Mouse) {
     let dpi = mouse.get_settings().dpi();
     println!("Mouse is set at {dpi} DPI");
 }
 
-fn set_dpi(mouse: &Mouse, dpi: u32) {
+fn set_dpi(mouse: &mut Mouse, dpi: u32) {
     mouse.set_dpi(dpi);
     println!("Mouse DPI Set to {}", (dpi / 50) * 50);
 }

@@ -99,9 +99,8 @@ pub fn half_ms_loop() -> bool {
             let mut buf = [0; 5];
             // We can unwrap the error, since we know we can pull
             let report = usb::pull_report(cs).unwrap();
-            // Index 0 has 0x03, the report ID,
-            // which we don't care about
-            buf.copy_from_slice(&report[1..6]);
+            let max = report.len().min(5);
+            buf[..max].copy_from_slice(&report[..max]);
 
             MOUSE
                 .borrow(cs)
