@@ -1,6 +1,6 @@
 use crate::{commands::Commands, keys::map_string};
 use clap::Parser;
-use commands::FunCommand;
+use commands::{Dist, FunCommand};
 use keys::map_keys;
 use mouse::Mouse;
 use pixels::{Pixels, SurfaceTexture};
@@ -63,7 +63,29 @@ fn main() {
             FunCommand::View => display_mouse_frames(mouse),
         },
         Commands::PollingRate { rate } => set_mouse_polling_rate(rate, &mouse),
+        Commands::CalibrateLiftoff => callibrate_mouse_liftoff(&mouse),
+        Commands::SetLiftoffDist { dist } => set_mouse_liftoff_dist(dist, &mouse),
     };
+}
+
+fn set_mouse_liftoff_dist(dist: Dist, mouse: &Mouse) {
+    let dist = match dist {
+        Dist::high => true,
+        Dist::low => false,
+    };
+    if let Ok(()) = mouse.set_liftoff_dist(dist) {
+        println!("Liftoff dist set!");
+    } else {
+        println!("Failed to set liftoff dist...");
+    }
+}
+
+fn callibrate_mouse_liftoff(mouse: &Mouse) {
+    if let Ok(()) = mouse.calibrate_liftoff() {
+        println!("Mouse Liftoff Calibrated!");
+    } else {
+        println!("Failed to calibrate mouse liftoff...");
+    }
 }
 
 fn display_mouse_frames(mut mouse: Mouse) {
@@ -248,7 +270,7 @@ fn get_angle_snap(mouse: &Mouse) {
             println!("Angle snap is disabled!");
         }
     } else {
-        println!("Failed to get angle snap!");
+        println!("Failed to get angle snap");
     }
 }
 

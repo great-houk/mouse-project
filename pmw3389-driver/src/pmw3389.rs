@@ -95,6 +95,53 @@ impl<DRIVER: Pmw3389Driver> Pmw3389<DRIVER> {
         Ok(())
     }
 
+    pub fn calibrate_liftoff(&mut self) -> Result<(), Pmw3389Error> {
+        /*
+            1. Ensure that the chip is powered up according to the Power Up Sequence.
+            2. Ensure SROM is successfully downloaded
+            3. Prompt the user that the "Lift cut off calibration" procedure is about to begin to ensure that the mouse is placed
+               nominally on the surface (mouse is not lifted).
+            4. Start the calibration procedure by setting RUN_CAL bit of LiftCutoff_Cal1 register to 1. The calibration procedure can
+            be started by a SW prompt to the user or user-initiated through a mouse-click event.
+            5. Poll CAL_STAT[2:0] of LiftCutoff_Cal1 to check the status of the calibration procedure. There are three ways to
+               successfully stop the calibration procedure: set RUN_CAL register bit to 0 if either:
+            a. CAL_STAT[2:0] of LiftCutoff_Cal1 register = 0x02,
+            b. CAL_STAT[2:0] of LiftCutoff_Cal1 register = 0x02 & user initiates a stop through a mouse-click event, or,
+            c. CAL_STAT[2:0] of LiftCutoff_Cal1 register = 0x03.
+            If CAL_STAT[2:0] of LiftCutoff_Cal1 register = 0x04, the calibration procedure needs to be re-started.
+            6. Stop the calibration procedure by ensuring that the RUN_CAL register bit is 0, then wait 1msec before reading the
+               recommended “RawData Threshold” register value, RPTH[6:0] (lower 7 bits of LiftCutoff_Cal2 register). RPTH[6:0]
+               recommends a RawData threshold value that replaces the default value of the RawData_Threshold register to improve
+               lift performance.
+            7. Read the recommended “Min SQUAL Run” register value, RMSQ[7:0] (entire 8 bits of LiftCutoff_Cal3 register).
+               RMSQ[7:0] recommends a Min SQUAL Run value that replaces the default value of the Min_SQ_Run register to
+               improve lift performance.
+            8. The Lift cut off calibration procedure is completed.
+        */
+
+        // Assume 1-3 are handled
+        // 4.
+        self.write_reg(Register::LiftCutoffCal1, 0b1000_0000, true)?;
+        // 5.
+        while {
+            let val = self.read_reg(Register::LiftCutoffCal1, true)? & 0b111;
+            if val == 0x04 {
+                return Err(Pmw3389Error::CalTimeout);
+            }
+            val != 0x03
+        } {}
+        // 6.
+        self.write_reg(Register::LiftCutoffCal1, 0x0, true)?;
+        self.driver.delay_ms(1)?;
+        let raw_data_thresh = self.read_reg(Register::LiftCutoffCal2, true)? & 0b0111_1111;
+        self.write_reg(Register::RawDataThreshold, raw_data_thresh, true)?;
+        // 7.
+        let min_squal = self.read_reg(Register::LiftCutoffCal3, true)?;
+        self.write_reg(Register::MinSQRun, min_squal, true)?;
+        // 8.
+        Ok(())
+    }
+
     pub fn reset_sensor(&mut self) -> Result<(), Pmw3389Error> {
         self.write_reg(Register::Config2, 0x20, true)?;
         self.write_reg(Register::PowerUpReset, 0x5A, true)?;

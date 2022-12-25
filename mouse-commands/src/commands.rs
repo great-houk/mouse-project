@@ -54,6 +54,8 @@ pub enum Command {
     SetPollingRate(u8 /* Number of ms between poll */),
     StreamSensorImages(u16 /* Number of Frames */),
     ResetSensor,
+    CalibrateLiftoff,
+    SetLiftoffDist(bool /* True: High, False: Low */),
     // Not to be sent by host, ever
     Loop(u16 /* Index */, (u8, [u8; 4])),
 }
@@ -85,6 +87,14 @@ impl Command {
                 (15, [val0, val1, 0, 0])
             }
             Self::ResetSensor => (16, [0; 4]),
+            Self::CalibrateLiftoff => (17, [0; 4]),
+            Self::SetLiftoffDist(dist) => {
+                if *dist {
+                    (18, [1, 0, 0, 0])
+                } else {
+                    (18, [0; 4])
+                }
+            }
             // Info/State Commands
             Self::Loop(_, _) => Command::Err(CommandError::InvalidCommand).get_command(),
         }
@@ -139,6 +149,15 @@ impl Command {
             ]))),
             // Reset Sensor
             (16, _) => Ok(Command::ResetSensor),
+            // Start lift cal
+            (17, _) => Ok(Command::CalibrateLiftoff),
+            (18, [dist, ..]) => {
+                if *dist > 0 {
+                    Ok(Command::SetLiftoffDist(true))
+                } else {
+                    Ok(Command::SetLiftoffDist(false))
+                }
+            }
             // Nothing else matched, so it's an invalid command
             _ => Err(CommandError::InvalidCommand),
         }

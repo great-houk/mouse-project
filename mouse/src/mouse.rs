@@ -381,6 +381,28 @@ impl Mouse {
                         Response::Ok
                     }
                 }
+                Command::CalibrateLiftoff => {
+                    if let Err(_) = self.sensor.calibrate_liftoff() {
+                        Response::Err(CommandError::SensorErr)
+                    } else {
+                        Response::Ok
+                    }
+                }
+                Command::SetLiftoffDist(highlow) => {
+                    if *highlow {
+                        if let Err(_) = self.sensor.write(0b11, Pmw3389Register::LiftConfig) {
+                            Response::Err(CommandError::SensorErr)
+                        } else {
+                            Response::Ok
+                        }
+                    } else {
+                        if let Err(_) = self.sensor.write(0b10, Pmw3389Register::LiftConfig) {
+                            Response::Err(CommandError::SensorErr)
+                        } else {
+                            Response::Ok
+                        }
+                    }
+                }
                 // Loop
                 Command::Loop(ind_mut, (inner, args)) => {
                     // Get inner command
