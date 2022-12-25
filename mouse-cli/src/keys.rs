@@ -79,6 +79,8 @@ fn get_hashmaps() -> (HashMap<&'static str, u8>, HashMap<&'static str, u8>) {
         ("SHIFT", 0x02),
         ("ALT", 0x04),
         ("META", 0x08),
+        ("WIN", 0x08),
+        ("CMD", 0x08),
         ("LCTRL", 0x01),
         ("LSHIFT", 0x02),
         ("LALT", 0x04),

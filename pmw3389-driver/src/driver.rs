@@ -10,6 +10,7 @@ pub enum Pmw3389Error {
     BadInput,
     BufOverflow,
     NotInitialized,
+    CalTimeout,
 }
 
 pub trait Pmw3389Driver {

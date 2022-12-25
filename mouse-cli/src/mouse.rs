@@ -1,5 +1,3 @@
-use core::panic;
-
 use hidapi::HidDevice;
 use mouse_commands::{Command, CommandError, DataType, Response};
 use pmw3389_driver::Pmw3389Register;
@@ -221,7 +219,7 @@ impl Mouse {
         self.write(Command::StreamSensorImages(frames));
 
         if self.read() != Ok(Response::Ok) {
-            panic!("Failed Read");
+            return Err(());
         }
 
         Ok(())
@@ -250,7 +248,29 @@ impl Mouse {
         self.write(Command::ResetSensor);
 
         if self.read() != Ok(Response::Ok) {
-            panic!("Failed Read");
+            return Err(());
+        }
+
+        Ok(())
+    }
+
+    pub fn calibrate_liftoff(&self) -> Result<(), ()> {
+        // Send command
+        self.write(Command::CalibrateLiftoff);
+
+        if self.read() != Ok(Response::Ok) {
+            return Err(());
+        }
+
+        Ok(())
+    }
+
+    pub fn set_liftoff_dist(&self, dist: bool) -> Result<(), ()> {
+        // Send command
+        self.write(Command::SetLiftoffDist(dist));
+
+        if self.read() != Ok(Response::Ok) {
+            return Err(());
         }
 
         Ok(())

@@ -38,6 +38,21 @@ pub enum Commands {
         #[clap(subcommand)]
         command: FunCommand,
     },
+    /// Calibrate Liftoff parameters, move the mouse around slowly on the surface for 20 seconds
+    #[clap(name = "lift-cal")]
+    CalibrateLiftoff,
+    /// Set liftoff distance cutoff to either high (3mm) or low (2mm)
+    #[clap(name = "lift-dist")]
+    SetLiftoffDist {
+        #[clap(value_enum)]
+        dist: Dist,
+    },
+}
+
+#[derive(clap::ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Dist {
+    high,
+    low,
 }
 
 #[derive(Debug, Subcommand)]
